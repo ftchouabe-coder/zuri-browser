@@ -4,14 +4,21 @@
     "electron.vite.config.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
-    "src/shared/**/*.ts"
+    "src/shared/**/*.ts",
+    "tests/**/*.ts"
   ],
   "compilerOptions": {
-    "types": ["node"],
-    "lib": ["ES2023"],
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2023"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": [
+        "src/shared/*"
+      ]
     }
   }
 }

@@ -1,5 +1,6 @@
 import { session, type Session } from 'electron'
-import { attachDownloads } from './downloads'
+import { attachDownloads, forgetPrivateDownloads } from './downloads'
+import { forgetPrivateFavicons } from './favicons'
 import { hardenSession, privacyShield } from './privacy'
 import { registerInternalProtocol } from './protocol'
 
@@ -40,4 +41,6 @@ export async function clearPrivateSession(): Promise<void> {
   await priv.clearStorageData()
   await priv.clearCache()
   await priv.clearAuthCache()
+  forgetPrivateDownloads()
+  forgetPrivateFavicons()
 }

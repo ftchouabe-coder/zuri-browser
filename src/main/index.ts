@@ -13,12 +13,12 @@ import {
 import {
   clearPrivateSession,
   getMainSession,
-  getPrivateSession,
   initSessions
 } from './sessions'
 import { flushSettings, getSettings, onSettingsChanged } from './settings'
 import { JsonStore } from './store'
 import { TabManager } from './tabs'
+import { initUpdater } from './updater'
 
 app.setName('Zuri')
 if (process.platform === 'win32') app.setAppUserModelId('af.zuri.browser')
@@ -63,6 +63,7 @@ async function bootstrap(): Promise<void> {
 
   createWindow()
   registerIpc()
+  initUpdater()
 }
 
 function createWindow(): void {
@@ -242,9 +243,17 @@ app.on('before-quit', (event) => {
     event.preventDefault()
     quitting = true
     clearPermissionDecisions()
-    void Promise.all([getMainSession().clearStorageData(), getPrivateSession().clearStorageData()])
-      .catch(() => undefined)
-      .finally(() => app.quit())
+    // Effacement complet : historique, cookies et stockage, cache HTTP, identifiants HTTP.
+    // Les onglets ouverts restent gérés par l'option « Restaurer les onglets ».
+    clearHistory()
+    flushHistory()
+    const main = getMainSession()
+    void Promise.allSettled([
+      main.clearStorageData(),
+      main.clearCache(),
+      main.clearAuthCache(),
+      clearPrivateSession()
+    ]).finally(() => app.quit())
   }
 })
 

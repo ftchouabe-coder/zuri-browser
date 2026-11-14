@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Electron embarque Chromium : ses mises à jour de sécurité sont prioritaires.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      electron:
+        patterns: ['electron', 'electron-builder', 'electron-updater', 'electron-vite']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

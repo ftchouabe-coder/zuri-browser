@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto'
 import type { BlockedInfo, DownloadItem, TabId, TabState, TabsSnapshot } from '@shared/types'
 import { chromeHeightFor } from '@shared/layout'
 import { addBookmark } from './bookmarks'
+import { loadFavicon } from './favicons'
 import { recordVisit, updateTitle } from './history'
 import { privacyShield } from './privacy'
 import { isHttpUrl, resolveInput } from './search'
@@ -183,8 +184,17 @@ export class TabManager {
     })
 
     contents.on('page-favicon-updated', (_event, favicons) => {
-      tab.favicon = favicons[favicons.length - 1] ?? null
-      this.scheduleEmit()
+      const source = favicons[favicons.length - 1]
+      const pageUrl = contents.getURL()
+      tab.favicon = null
+      if (!source) return this.scheduleEmit()
+      // Le favicon est téléchargé par la session de l'onglet (anti-pub, partition privée)
+      // puis transmis à l'interface en data: — l'interface ne fait aucune requête réseau.
+      void loadFavicon(contents.session, source, tab.isPrivate).then((dataUrl) => {
+        if (contents.isDestroyed() || contents.getURL() !== pageUrl) return
+        tab.favicon = dataUrl
+        this.scheduleEmit()
+      })
     })
 
     contents.on('did-start-loading', () => {

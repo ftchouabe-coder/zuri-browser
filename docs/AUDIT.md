@@ -12,6 +12,16 @@
 > aucune visite privée dans l'historique, purge du dernier onglet privé, une visite comptée
 > une fois, schémas `javascript:` refusés, IPC validée. Le test de fumée passe toujours.
 > Restent ouverts : E1–E4, E7, M1–M8.
+>
+> **Mise à jour du 14/11/2026 — Sprint 1 appliqué** :
+> - **E1** : `electron-updater` (GitHub Releases, SHA-512, pas de retour en arrière, réglage « Mises à jour automatiques » actif par défaut ; ne concerne pas la version portable) et fuses Electron appliquées au packaging (`RunAsNode`, `NODE_OPTIONS`, `--inspect` désactivés ; intégrité de l'asar, chargement depuis l'asar uniquement, chiffrement des cookies activés). `GrantFileProtocolExtraPrivileges` reste actif car l'interface est chargée en `file://`.
+> - **E3** : confirmation avant d'ouvrir un exécutable ou un document à macros. Mark of the Web vérifiée (Chromium la pose déjà ; repli maison sinon). Téléchargements privés annulés et oubliés en fin de session privée.
+> - **E4** : site de premier niveau déterminé depuis l'onglet (plus seulement le référent), Public Suffix List via `tldts`, `Set-Cookie` tiers filtré. Limite résiduelle : `document.cookie` dans une iframe tierce n'est pas bloqué.
+> - **E7** : favicons téléchargés par la session de l'onglet, sans cookies, et transmis en `data:`. CSP de l'interface stricte en production (`connect-src 'self'`, `img-src 'self' data:`, aucun script inline).
+> - **M1** : « Effacer à la fermeture » supprime aussi l'historique, le cache et les identifiants HTTP. **M3** : page d'accueil validée et normalisée.
+> - **Tests** : 62 tests unitaires (Vitest), suite de bout en bout `npm run test:e2e` de 26 contrôles avec code de sortie, CI GitHub Actions (Windows) et Dependabot.
+>
+> Restent ouverts : E2 (anti-phishing), M2 (popups/opener), M4 (`adblocker-electron`), M5 (chiffrement au repos), M6 (traité en partie), M7, M8, signature de code.
 
 ---
 

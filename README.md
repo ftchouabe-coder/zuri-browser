@@ -45,6 +45,8 @@ Premier lancement : Zuri télécharge EasyList et EasyPrivacy, puis met les list
 |---|---|
 | `npm run dev` | Lance l’application en développement avec rechargement à chaud. |
 | `npm run typecheck` | Vérifie les types du processus principal et du renderer. |
+| `npm test` | Tests unitaires (Vitest) des modules de sécurité : URL, cookies tiers, fichiers dangereux, page d’erreur, réglages. |
+| `npm run test:e2e` | Compile puis lance la suite de bout en bout (permissions, mode privé, cookies tiers, téléchargements, page d’erreur…). Nécessite le réseau. |
 | `npm run build` | Compile `out/main`, `out/preload`, `out/renderer`. |
 | `npm start` | Ouvre la version compilée (`electron-vite preview`). |
 | `npm run smoke` | Compile puis lance le test de fumée (capture + navigation vers `example.com`). |
@@ -80,6 +82,8 @@ Points d’architecture :
 - Pas d’extensions, pas de gestionnaire de mots de passe intégré, pas de synchronisation entre appareils (choix assumé).
 - Les listes de filtres nécessitent un accès réseau au premier lancement ; ensuite elles sont mises en cache.
 - Pas encore de signature de code : Windows SmartScreen peut afficher un avertissement au premier lancement de l’installeur.
+- Mises à jour automatiques via GitHub Releases pour la version installée uniquement : la version portable doit être remplacée à la main.
+- Pas de protection anti-phishing de type Safe Browsing (non fournie par Electron).
 - En développement (`electron .`), les données sont écrites dans `%APPDATA%\Electron\data` ; une version packagée utilise `%APPDATA%\Zuri\data`.
 - Le rendu de certaines pages complexes peut différer de Chrome selon les protections activées.
 

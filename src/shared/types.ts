@@ -60,6 +60,7 @@ export interface Settings {
   clearOnExit: boolean
   showBookmarksBar: boolean
   restoreSession: boolean
+  autoUpdate: boolean
   homepage: string
 }
 
@@ -78,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clearOnExit: false,
   showBookmarksBar: true,
   restoreSession: true,
+  autoUpdate: true,
   homepage: ''
 }
 

@@ -315,6 +315,18 @@ export function SettingsPanel({
               <span className="meta-value">{privacy.totalBlocked}</span>
             </div>
           </div>
+
+          <Row
+            title={t('settings.autoUpdate')}
+            description={t('settings.autoUpdateDesc')}
+            control={
+              <Switch
+                checked={settings.autoUpdate}
+                label={t('settings.autoUpdate')}
+                onChange={(checked) => void onChange({ autoUpdate: checked })}
+              />
+            }
+          />
         </section>
       </div>
     </Panel>

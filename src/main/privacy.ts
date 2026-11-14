@@ -1,7 +1,17 @@
-import { app, BrowserWindow, dialog, net, session as electronSession, type Session, type WebContents } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  net,
+  session as electronSession,
+  webContents,
+  type Session,
+  type WebContents
+} from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { FiltersEngine, Request, type RequestType } from '@ghostery/adblocker'
+import { isThirdParty } from './cookie-policy'
 import { getSettings } from './settings'
 
 /**
@@ -28,17 +38,23 @@ function mapResourceType(type: string): AdblockerRequestType {
   return type as AdblockerRequestType
 }
 
-/** Clé de site approximative (eTLD+1) pour le blocage des cookies tiers. */
-function siteKey(hostname: string): string {
-  const parts = hostname.toLowerCase().split('.').filter(Boolean)
-  if (parts.length <= 2) return parts.join('.')
-  const twoLevel = new Set([
-    'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'co.za', 'org.za', 'gov.za', 'co.ke', 'go.ke',
-    'co.tz', 'co.ug', 'com.gh', 'com.ng', 'org.ng', 'co.ma', 'com.eg', 'com.sn', 'co.ci',
-    'com.cm', 'co.mz', 'co.zw', 'co.bw', 'com.au', 'co.nz', 'com.br', 'com.mx', 'co.in'
-  ])
-  const lastTwo = parts.slice(-2).join('.')
-  return twoLevel.has(lastTwo) ? parts.slice(-3).join('.') : lastTwo
+/**
+ * URL de la page de premier niveau qui a émis la requête : l'URL de l'onglet, sinon
+ * le référent. Le référent seul ne suffit pas : il est vide dès qu'un site impose
+ * `Referrer-Policy: no-referrer`, ce qui laissait passer les cookies tiers.
+ */
+function topLevelUrl(details: {
+  webContents?: WebContents
+  webContentsId?: number
+  referrer?: string
+}): string | null {
+  let contents = details.webContents
+  if (!contents && typeof details.webContentsId === 'number') {
+    contents = webContents.fromId(details.webContentsId) ?? undefined
+  }
+  const url = contents && !contents.isDestroyed() ? contents.getURL() : ''
+  if (/^https?:/i.test(url)) return url
+  return details.referrer || null
 }
 
 export interface BlockedListener {
@@ -239,20 +255,38 @@ export class PrivacyShield {
         }
       }
 
-      if (settings.blockThirdPartyCookies && details.resourceType !== 'mainFrame') {
-        const cookieKey = Object.keys(headers).find((name) => name.toLowerCase() === 'cookie')
-        if (cookieKey && details.referrer) {
-          try {
-            const targetSite = siteKey(new URL(details.url).hostname)
-            const sourceSite = siteKey(new URL(details.referrer).hostname)
-            if (targetSite !== sourceSite) delete headers[cookieKey]
-          } catch {
-            /* ignore */
-          }
+      if (
+        settings.blockThirdPartyCookies &&
+        details.resourceType !== 'mainFrame' &&
+        isThirdParty(details.url, topLevelUrl(details))
+      ) {
+        for (const name of Object.keys(headers)) {
+          if (name.toLowerCase() === 'cookie') delete headers[name]
         }
       }
 
       callback({ requestHeaders: headers })
+    })
+
+    // Un tiers ne doit pas non plus pouvoir *déposer* de cookie via ses réponses.
+    ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
+      const headers = details.responseHeaders
+      if (
+        !headers ||
+        !getSettings().blockThirdPartyCookies ||
+        details.resourceType === 'mainFrame' ||
+        !isThirdParty(details.url, topLevelUrl(details))
+      ) {
+        return callback({})
+      }
+      let changed = false
+      for (const name of Object.keys(headers)) {
+        if (name.toLowerCase() === 'set-cookie') {
+          delete headers[name]
+          changed = true
+        }
+      }
+      callback(changed ? { responseHeaders: headers } : {})
     })
   }
 

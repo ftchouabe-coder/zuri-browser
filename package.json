@@ -21,15 +21,19 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "vitest run",
+    "test:e2e": "npm run build && electron scripts/e2e.cjs",
     "smoke": "npm run build && electron scripts/smoke.cjs",
     "icon": "pwsh -NoProfile -File scripts/make-icon.ps1",
-    "pack": "electron-vite build && electron-builder --win --dir",
+    "pack": "electron-vite build && electron-builder --win --dir --publish never",
     "dist": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
     "@ghostery/adblocker": "^2.20.3",
+    "electron-updater": "^6.8.11",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "tldts": "^7.5.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
@@ -40,7 +44,8 @@
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "typescript": "^5.9.3",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^4.1.12"
   },
   "build": {
     "appId": "af.zuri.browser",
@@ -66,6 +71,25 @@
     },
     "portable": {
       "artifactName": "Zuri-${version}-portable.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ftchouabe-coder",
+        "repo": "zuri-browser",
+        "releaseType": "release"
+      }
+    ],
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "loadBrowserProcessSpecificV8Snapshot": false,
+      "grantFileProtocolExtraPrivileges": true
     }
   }
 }
