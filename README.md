@@ -3,6 +3,8 @@
 **Zuri** est un navigateur web de bureau privé, rapide et local-first, habillé d’une identité visuelle africaine sobre. Pas de compte, pas de télémétrie, pas de nuage : vos onglets, favoris et historique restent sur votre machine.
 
 > État : **MVP fonctionnel pour Windows**. Linux et macOS sont prévus ensuite.
+>
+> Téléchargement : [dernière version publiée](https://github.com/ftchouabe-coder/zuri-browser/releases/latest).
 
 ---
 

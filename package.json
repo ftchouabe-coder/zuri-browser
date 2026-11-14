@@ -2,8 +2,15 @@
   "name": "zuri-browser",
   "version": "0.1.0",
   "description": "Zuri — navigateur web privé aux couleurs africaines",
-  "homepage": "https://github.com/",
-  "author": "Zuri",
+  "homepage": "https://github.com/ftchouabe-coder/zuri-browser",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ftchouabe-coder/zuri-browser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ftchouabe-coder/zuri-browser/issues"
+  },
+  "author": "Zuri contributors",
   "license": "MIT",
   "private": true,
   "main": "./out/main/index.js",
