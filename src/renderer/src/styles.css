@@ -636,6 +636,20 @@ img {
   flex: 0 0 auto;
 }
 
+.popup-badge {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  color: var(--terracotta);
+  background: color-mix(in srgb, var(--terracotta) 12%, transparent);
+  font-size: 10.5px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
 .shield-badge.is-off {
   color: var(--ink-faint);
   background: transparent;

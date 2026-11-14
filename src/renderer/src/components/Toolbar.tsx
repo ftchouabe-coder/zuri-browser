@@ -167,6 +167,18 @@ export function Toolbar({
           {(tab?.blocked ?? 0) > 0 && <span className="shield-count">{tab?.blocked}</span>}
         </span>
 
+        {(tab?.popupsBlocked ?? 0) > 0 && (
+          <span
+            className="popup-badge"
+            role="status"
+            title={`${tab?.popupsBlocked} ${t('omni.popupBlocked')}`}
+            aria-label={`${tab?.popupsBlocked} ${t('omni.popupBlocked')}`}
+          >
+            <Icon name="eyeOff" size={13} />
+            <span className="shield-count">{tab?.popupsBlocked}</span>
+          </span>
+        )}
+
         <input
           ref={inputRef}
           value={value}

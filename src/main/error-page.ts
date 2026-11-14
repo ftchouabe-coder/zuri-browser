@@ -47,6 +47,39 @@ function safeRetryTarget(url: string): string {
 
 const TOKEN_RE = /^[0-9a-f-]{36}$/i
 
+/** Site signalé par les listes de sécurité, avec le jeton du lien « Continuer quand même ». */
+export interface ThreatPage {
+  kind: 'phishing' | 'malware'
+  token: string
+}
+
+const THREAT_TEXT = {
+  phishing: {
+    fr: {
+      label: 'Site d’hameçonnage signalé',
+      title: 'Ce site pourrait voler vos informations',
+      body: 'Il est signalé comme un site de phishing : il imite un service connu (banque, messagerie, paiement mobile…) pour obtenir mots de passe, codes ou numéros de carte.'
+    },
+    en: {
+      label: 'Reported phishing site',
+      title: 'This site may steal your information',
+      body: 'It is reported as a phishing site: it imitates a well-known service (bank, email, mobile money…) to obtain passwords, codes or card numbers.'
+    }
+  },
+  malware: {
+    fr: {
+      label: 'Logiciel malveillant signalé',
+      title: 'Ce site distribue des logiciels malveillants',
+      body: 'Il est signalé pour héberger des programmes dangereux qui peuvent infecter votre ordinateur, chiffrer vos fichiers ou espionner votre activité.'
+    },
+    en: {
+      label: 'Reported malware',
+      title: 'This site distributes malware',
+      body: 'It is reported for hosting dangerous programs that can infect your computer, encrypt your files or spy on your activity.'
+    }
+  }
+} as const
+
 /**
  * Page d'erreur interne. Elle ne contient **aucun script** (CSP `script-src 'none'`) :
  * toutes les données sont des chaînes échappées dans du texte ou des attributs `href`
@@ -58,7 +91,8 @@ export function errorPage(
   code: number,
   description: string,
   insecureToken: string,
-  settings: Pick<Settings, 'language'>
+  settings: Pick<Settings, 'language'>,
+  threat: ThreatPage | null = null
 ): string {
   const fr = settings.language === 'fr'
   const message =
@@ -115,14 +149,55 @@ export function errorPage(
   }
   button:hover, a.btn:hover { transform: translateY(-1px); }
   .primary { background: #24325B; color: #fff; }
+  .danger .stripe { background: #B3261E; }
+  .danger .code { color: #B3261E; }
+  .danger .card { border-color: #B3261E; }
+  .link { font-size: 13px; color: inherit; opacity: .75; align-self: center; margin-left: auto; }
   .ghost { background: transparent; color: #1B1917; border-color: #C9BBA4; }
   a { color: inherit; }
 </style>
 </head>
-<body>
+<body${threat ? ' class="danger"' : ''}>
   <main class="card">
     <div class="stripe"></div>
-    <div class="code">${escapeHtml(message)}</div>
+    ${threat ? threatContent(url, threat, fr) : errorContent(url, code, message, target, retryInsecure, insecureToken, fr)}
+  </main>
+</body>
+</html>`
+}
+
+function threatContent(url: string, threat: ThreatPage, fr: boolean): string {
+  const text = THREAT_TEXT[threat.kind][fr ? 'fr' : 'en']
+  const proceed = TOKEN_RE.test(threat.token)
+    ? `<a class="link" href="zuri://action/proceed-unsafe?t=${encodeURIComponent(threat.token)}">${
+        fr ? 'Ignorer l’avertissement et continuer' : 'Ignore the warning and continue'
+      }</a>`
+    : ''
+  return `<div class="code">${escapeHtml(text.label)}</div>
+    <h1>${escapeHtml(text.title)}</h1>
+    <p>${escapeHtml(text.body)}</p>
+    <div class="url">${escapeHtml(url)}</div>
+    <p class="muted">${
+      fr
+        ? 'Zuri a bloqué la page avant son chargement. Aucune donnée ne lui a été envoyée. Les listes sont vérifiées sur votre appareil : Zuri ne transmet pas les adresses que vous visitez.'
+        : 'Zuri blocked the page before it loaded. No data was sent to it. Lists are checked on your device: Zuri does not send the addresses you visit.'
+    }</p>
+    <div class="actions">
+      <a class="btn primary" href="zuri://action/back">${fr ? 'Retour en lieu sûr' : 'Back to safety'}</a>
+      ${proceed}
+    </div>`
+}
+
+function errorContent(
+  url: string,
+  code: number,
+  message: string,
+  target: string,
+  retryInsecure: boolean,
+  insecureToken: string,
+  fr: boolean
+): string {
+  return `<div class="code">${escapeHtml(message)}</div>
     <h1>${fr ? 'Cette page ne répond pas' : 'This page is not responding'}</h1>
     <p class="muted">${
       fr
@@ -143,10 +218,7 @@ export function errorPage(
     </div>
     <p class="muted" style="margin-top:22px;font-size:12px">${
       fr ? `Code d’erreur ${Number.isFinite(code) ? code : 0}` : `Error code ${Number.isFinite(code) ? code : 0}`
-    } · Zuri</p>
-  </main>
-</body>
-</html>`
+    } · Zuri</p>`
 }
 
 export const PAGE_CSP =

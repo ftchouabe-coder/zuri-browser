@@ -3,7 +3,6 @@ import {
   Menu,
   WebContentsView,
   clipboard,
-  dialog,
   shell,
   type MenuItemConstructorOptions,
   type WebContents
@@ -13,8 +12,9 @@ import type { BlockedInfo, DownloadItem, TabId, TabState, TabsSnapshot } from '@
 import { chromeHeightFor } from '@shared/layout'
 import { addBookmark } from './bookmarks'
 import { loadFavicon } from './favicons'
+import { tr } from './i18n'
 import { recordVisit, updateTitle } from './history'
-import { privacyShield } from './privacy'
+import { privacyShield, type ThreatKind } from './privacy'
 import { isHttpUrl, resolveInput } from './search'
 import { getSettings } from './settings'
 import { clearPrivateSession, MAIN_PARTITION, PRIVATE_PARTITION } from './sessions'
@@ -34,10 +34,19 @@ interface ZuriTab {
   zoom: number
   crashed: boolean
   errorUrl: string | null
+  /** Horodatages des fenêtres surgissantes ouvertes récemment (limiteur anti-spam). */
+  popupTimes: number[]
+  /** Fenêtres surgissantes bloquées depuis le dernier chargement de page. */
+  popupsBlocked: number
 }
 
 /** Durée de validité du lien « Continuer en HTTP » d'une page d'erreur. */
 const INSECURE_TOKEN_TTL_MS = 10 * 60 * 1000
+
+const POPUP_BURST_MS = 5_000
+const POPUP_BURST_MAX = 2
+const POPUP_WINDOW_MS = 60_000
+const POPUP_WINDOW_MAX = 6
 
 /** Origine d'une navigation : saisie dans l'interface ou source interne/web (liens, menus…). */
 export type NavigationSource = 'user' | 'internal'
@@ -57,7 +66,10 @@ export class TabManager {
   private emitTimer: NodeJS.Timeout | null = null
   private readonly deps: TabManagerDeps
   private readonly wcToTab = new Map<number, TabId>()
-  private readonly insecureTokens = new Map<string, { tabId: TabId; url: string; expires: number }>()
+  private readonly insecureTokens = new Map<
+    string,
+    { tabId: TabId; url: string; kind: 'insecure' | 'unsafe'; expires: number }
+  >()
 
   constructor(deps: TabManagerDeps) {
     this.deps = deps
@@ -97,11 +109,20 @@ export class TabManager {
   create(
     url?: string,
     isPrivate = false,
-    options?: { background?: boolean; source?: NavigationSource }
+    options?: {
+      background?: boolean
+      source?: NavigationSource
+      /** Contenu déjà créé par Chromium pour un `window.open` (garde le lien `opener`). */
+      popup?: { webContents: WebContents; url: string }
+    }
   ): ZuriTab {
     const settings = getSettings()
     const id = randomUUID()
-    const view = new WebContentsView({
+    const popup = options?.popup
+    // Un popup hérite de la session et des préférences (sandbox…) de son ouvreur.
+    const view = popup
+      ? new WebContentsView({ webContents: popup.webContents })
+      : new WebContentsView({
       webPreferences: {
         partition: isPrivate ? PRIVATE_PARTITION : MAIN_PARTITION,
         sandbox: true,
@@ -119,17 +140,19 @@ export class TabManager {
       id,
       view,
       title: '',
-      url: '',
+      url: popup?.url ?? '',
       favicon: null,
       isPrivate,
-      isNewTab: !url,
+      isNewTab: !url && !popup,
       loading: false,
       blocked: 0,
       muted: false,
       audible: false,
       zoom: 0,
       crashed: false,
-      errorUrl: null
+      errorUrl: null,
+      popupTimes: [],
+      popupsBlocked: 0
     }
 
     this.tabs.set(id, tab)
@@ -150,10 +173,41 @@ export class TabManager {
   private wire(tab: ZuriTab): void {
     const contents = tab.view.webContents
 
-    contents.setWindowOpenHandler(({ url }) => {
-      if (/^https?:/i.test(url)) this.create(url, tab.isPrivate)
-      else if (/^mailto:|^tel:/i.test(url)) void shell.openExternal(url)
-      return { action: 'deny' }
+    contents.setWindowOpenHandler(({ url, disposition }) => {
+      if (/^(mailto|tel):/i.test(url)) {
+        void shell.openExternal(url)
+        return { action: 'deny' }
+      }
+      // about:blank : beaucoup de flux (paiement, connexion) ouvrent une page vide puis la
+      // remplissent. Tout autre schéma est refusé.
+      if (!isHttpUrl(url) && url !== 'about:blank') return { action: 'deny' }
+      if (!this.allowPopup(tab)) {
+        tab.popupsBlocked += 1
+        this.scheduleEmit()
+        return { action: 'deny' }
+      }
+      // Le popup devient un onglet, mais garde `window.opener` : les connexions OAuth
+      // (Google, Microsoft, PayPal, Mobile Money…) renvoient leur résultat par ce lien.
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          webPreferences: {
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: true
+          }
+        },
+        createWindow: (options) => {
+          const webContents = (options as { webContents?: WebContents }).webContents
+          if (!webContents) throw new Error('webContents de popup absent')
+          const created = this.create(undefined, tab.isPrivate, {
+            background: disposition === 'background-tab',
+            popup: { webContents, url }
+          })
+          return created.view.webContents
+        }
+      }
     })
 
     contents.on('will-navigate', (event, url) => {
@@ -205,7 +259,6 @@ export class TabManager {
 
     contents.on('did-stop-loading', () => {
       tab.loading = false
-      if (!tab.isNewTab) void privacyShield.applyCosmetics(contents, contents.getURL())
       this.scheduleEmit()
     })
 
@@ -223,6 +276,7 @@ export class TabManager {
     contents.on('did-navigate', (_event, url) => {
       tab.url = url
       tab.favicon = null
+      tab.popupsBlocked = 0
       // Le titre de la nouvelle page n'est pas encore connu : page-title-updated le complétera.
       if (!tab.isPrivate && /^https?:/i.test(url)) recordVisit(url, '')
       this.scheduleEmit()
@@ -240,7 +294,10 @@ export class TabManager {
       tab.loading = false
       if (tab.errorUrl === validatedURL) return
       tab.errorUrl = validatedURL
-      setTimeout(() => this.showErrorPage(tab, validatedURL, errorCode, errorDescription), 30)
+      // ERR_BLOCKED_BY_CLIENT : si c'est la protection anti-phishing/malware, on affiche
+      // l'avertissement dédié plutôt qu'une simple erreur réseau.
+      const threat = errorCode === -20 ? privacyShield.takeThreat(contents.id, validatedURL) : null
+      setTimeout(() => this.showErrorPage(tab, validatedURL, errorCode, errorDescription, threat), 30)
       this.scheduleEmit()
     })
 
@@ -280,7 +337,13 @@ export class TabManager {
     })
   }
 
-  private showErrorPage(tab: ZuriTab, url: string, code: number, description: string): void {
+  private showErrorPage(
+    tab: ZuriTab,
+    url: string,
+    code: number,
+    description: string,
+    threat: ThreatKind | null = null
+  ): void {
     if (tab.view.webContents.isDestroyed()) return
     const params = new URLSearchParams({
       url,
@@ -288,14 +351,26 @@ export class TabManager {
       desc: description,
       lang: getSettings().language
     })
-    // « Continuer en HTTP » n'est proposé qu'avec un jeton à usage unique lié à cet onglet :
-    // le lien ne peut donc pas être fabriqué par un site.
-    if (/^https:\/\//i.test(url)) {
-      this.pruneInsecureTokens()
+    // Les liens d'action d'une page interne (« Continuer en HTTP », « Ignorer
+    // l'avertissement ») exigent un jeton à usage unique lié à cet onglet : ils ne peuvent
+    // donc pas être fabriqués par un site.
+    this.pruneInsecureTokens()
+    if (threat) {
+      const token = randomUUID()
+      this.insecureTokens.set(token, {
+        tabId: tab.id,
+        url,
+        kind: 'unsafe',
+        expires: Date.now() + INSECURE_TOKEN_TTL_MS
+      })
+      params.set('threat', threat)
+      params.set('t', token)
+    } else if (/^https:\/\//i.test(url)) {
       const token = randomUUID()
       this.insecureTokens.set(token, {
         tabId: tab.id,
         url: `http://${url.slice('https://'.length)}`,
+        kind: 'insecure',
         expires: Date.now() + INSECURE_TOKEN_TTL_MS
       })
       params.set('t', token)
@@ -331,68 +406,60 @@ export class TabManager {
       const token = action.searchParams.get('t') ?? ''
       const entry = this.insecureTokens.get(token)
       this.insecureTokens.delete(token)
-      if (!entry || entry.tabId !== tab.id || entry.expires < Date.now()) return
+      if (!entry || entry.kind !== 'insecure' || entry.tabId !== tab.id || entry.expires < Date.now()) return
       privacyShield.allowInsecureOnce(entry.url)
+      tab.errorUrl = null
+      void contents.loadURL(entry.url).catch(() => {})
+      return
+    }
+
+    if (action.pathname === '/proceed-unsafe') {
+      const token = action.searchParams.get('t') ?? ''
+      const entry = this.insecureTokens.get(token)
+      this.insecureTokens.delete(token)
+      if (!entry || entry.kind !== 'unsafe' || entry.tabId !== tab.id || entry.expires < Date.now()) return
+      privacyShield.allowUnsafeFor(contents.id, entry.url)
       tab.errorUrl = null
       void contents.loadURL(entry.url).catch(() => {})
     }
   }
 
-  private openContextMenu(
-    tab: ZuriTab,
-    params: Electron.ContextMenuParams
-  ): void {
+  private openContextMenu(tab: ZuriTab, params: Electron.ContextMenuParams): void {
     const items: MenuItemConstructorOptions[] = []
     const contents = tab.view.webContents
+    const history = contents.navigationHistory
     const settings = getSettings()
+    // Seuls les liens web sont proposés à l'ouverture (jamais file:, javascript:…).
+    const link = isHttpUrl(params.linkURL) ? params.linkURL : ''
+    const image = isHttpUrl(params.srcURL) ? params.srcURL : ''
 
-    if (params.linkURL) {
+    if (link) {
       items.push(
-        {
-          label: 'Ouvrir le lien dans un nouvel onglet',
-          click: () => this.create(params.linkURL, tab.isPrivate)
-        },
-        {
-          label: "Ouvrir dans une fenêtre privée",
-          click: () => this.create(params.linkURL, true)
-        },
+        { label: tr('ctx.openLinkTab'), click: () => this.create(link, tab.isPrivate) },
+        { label: tr('ctx.openLinkPrivate'), click: () => this.create(link, true) },
         { type: 'separator' },
-        {
-          label: 'Copier l’adresse du lien',
-          click: () => clipboard.writeText(params.linkURL)
-        },
-        {
-          label: 'Enregistrer le lien sous…',
-          click: () => contents.downloadURL(params.linkURL)
-        },
+        { label: tr('ctx.copyLink'), click: () => clipboard.writeText(link) },
+        { label: tr('ctx.saveLink'), click: () => contents.downloadURL(link) },
         { type: 'separator' }
       )
     }
 
-    if (params.srcURL && params.mediaType === 'image') {
+    if (image && params.mediaType === 'image') {
       items.push(
-        {
-          label: "Ouvrir l'image dans un nouvel onglet",
-          click: () => this.create(params.srcURL, tab.isPrivate)
-        },
-        {
-          label: "Enregistrer l'image sous…",
-          click: () => contents.downloadURL(params.srcURL)
-        },
-        {
-          label: "Copier l'adresse de l'image",
-          click: () => clipboard.writeText(params.srcURL)
-        },
+        { label: tr('ctx.openImage'), click: () => this.create(image, tab.isPrivate) },
+        { label: tr('ctx.saveImage'), click: () => contents.downloadURL(image) },
+        { label: tr('ctx.copyImageUrl'), click: () => clipboard.writeText(image) },
         { type: 'separator' }
       )
     }
 
     if (params.selectionText) {
       const query = params.selectionText.trim().slice(0, 120)
+      const shown = query.length > 40 ? `${query.slice(0, 40)}…` : query
       items.push(
-        { role: 'copy', label: 'Copier' },
+        { role: 'copy', label: tr('ctx.copy') },
         {
-          label: `Rechercher « ${query.slice(0, 40)} »`,
+          label: tr('ctx.search', { q: shown }),
           click: () => this.create(resolveInput(query, settings), tab.isPrivate)
         },
         { type: 'separator' }
@@ -401,34 +468,28 @@ export class TabManager {
 
     if (params.isEditable) {
       items.push(
-        { role: 'undo', label: 'Annuler' },
-        { role: 'redo', label: 'Rétablir' },
+        { role: 'undo', label: tr('ctx.undo') },
+        { role: 'redo', label: tr('ctx.redo') },
         { type: 'separator' },
-        { role: 'cut', label: 'Couper' },
-        { role: 'copy', label: 'Copier' },
-        { role: 'paste', label: 'Coller' },
-        { role: 'selectAll', label: 'Tout sélectionner' },
+        { role: 'cut', label: tr('ctx.cut') },
+        { role: 'copy', label: tr('ctx.copy') },
+        { role: 'paste', label: tr('ctx.paste') },
+        { role: 'selectAll', label: tr('ctx.selectAll') },
         { type: 'separator' }
       )
     } else if (!params.selectionText) {
-      items.push({ role: 'selectAll', label: 'Tout sélectionner' }, { type: 'separator' })
+      items.push({ role: 'selectAll', label: tr('ctx.selectAll') }, { type: 'separator' })
     }
 
     items.push(
-      { label: 'Précédent', enabled: contents.canGoBack(), click: () => contents.navigationHistory.goBack() },
-      { label: 'Suivant', enabled: contents.canGoForward(), click: () => contents.navigationHistory.goForward() },
-      { label: 'Recharger', click: () => contents.reload() },
+      { label: tr('ctx.back'), enabled: history.canGoBack(), click: () => history.goBack() },
+      { label: tr('ctx.forward'), enabled: history.canGoForward(), click: () => history.goForward() },
+      { label: tr('ctx.reload'), click: () => contents.reload() },
       { type: 'separator' },
-      {
-        label: 'Ajouter aux favoris',
-        click: () => this.addCurrentBookmark(tab)
-      },
-      {
-        label: 'Copier l’adresse de la page',
-        click: () => clipboard.writeText(contents.getURL())
-      },
+      { label: tr('ctx.bookmark'), click: () => this.addCurrentBookmark(tab) },
+      { label: tr('ctx.copyPageUrl'), click: () => clipboard.writeText(contents.getURL()) },
       { type: 'separator' },
-      { label: 'Inspecter', click: () => contents.openDevTools({ mode: 'detach' }) }
+      { label: tr('ctx.inspect'), click: () => contents.openDevTools({ mode: 'detach' }) }
     )
 
     Menu.buildFromTemplate(items).popup({ window: this.deps.window })
@@ -437,8 +498,8 @@ export class TabManager {
   addCurrentBookmark(tab: ZuriTab | undefined = this.activeTab): void {
     if (!tab || !tab.url || !/^https?:/i.test(tab.url)) return
     const bookmarks = addBookmark(tab.title || tab.url, tab.url)
+    // L'étoile de la barre d'adresse reflète l'ajout : pas besoin de notification.
     this.deps.window.webContents.send('zuri:bookmarks', bookmarks)
-    this.deps.window.webContents.send('zuri:toast', 'Page ajoutée aux favoris')
   }
 
   private select(id: TabId): void {
@@ -677,7 +738,7 @@ export class TabManager {
     return {
       id: tab.id,
       url,
-      title: tab.title || (url ? url : 'Nouvel onglet'),
+      title: tab.title || (url ? url : tr('tab.new')),
       favicon: tab.favicon,
       loading: tab.loading,
       canGoBack: !tab.isNewTab && contents.navigationHistory.canGoBack(),
@@ -688,7 +749,8 @@ export class TabManager {
       audible: tab.audible,
       muted: tab.muted,
       zoom: tab.zoom,
-      crashed: tab.crashed
+      crashed: tab.crashed,
+      popupsBlocked: tab.popupsBlocked
     }
   }
 
@@ -701,18 +763,17 @@ export class TabManager {
     }, 60)
   }
 
-  async confirmQuitWithPrivateTabs(): Promise<boolean> {
-    const hasPrivate = [...this.tabs.values()].some((tab) => tab.isPrivate)
-    if (!hasPrivate) return true
-    const result = await dialog.showMessageBox(this.deps.window, {
-      type: 'question',
-      buttons: ['Fermer', 'Annuler'],
-      defaultId: 1,
-      cancelId: 1,
-      title: 'Navigation privée',
-      message: 'Fermer Zuri et effacer la session privée ?'
-    })
-    return result.response === 0
+  /**
+   * Limiteur de fenêtres surgissantes par onglet : au plus 2 en 5 s et 6 par minute.
+   * Assez pour un flux de connexion ou de paiement, pas pour une rafale publicitaire.
+   */
+  private allowPopup(tab: ZuriTab): boolean {
+    const now = Date.now()
+    tab.popupTimes = tab.popupTimes.filter((time) => now - time < POPUP_WINDOW_MS)
+    const burst = tab.popupTimes.filter((time) => now - time < POPUP_BURST_MS).length
+    if (burst >= POPUP_BURST_MAX || tab.popupTimes.length >= POPUP_WINDOW_MAX) return false
+    tab.popupTimes.push(now)
+    return true
   }
 
   destroyAll(): void {

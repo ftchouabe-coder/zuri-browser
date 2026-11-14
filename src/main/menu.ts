@@ -357,7 +357,7 @@ export function installMenu({ window, tabs, sendUi, clearBrowsingData }: MenuOpt
         },
         {
           label: l.source,
-          click: () => void shell.openExternal('https://github.com/')
+          click: () => void shell.openExternal('https://github.com/ftchouabe-coder/zuri-browser')
         },
         { type: 'separator' },
         {

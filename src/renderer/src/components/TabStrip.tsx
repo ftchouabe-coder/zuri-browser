@@ -45,7 +45,7 @@ export function TabStrip({
         <span className="brand-mark">Z</span>
       </div>
 
-      <div className="tabs" role="tablist" aria-label="Onglets">
+      <div className="tabs" role="tablist" aria-label={t('common.tabs')}>
         {snapshot.tabs.map((tab) => (
           <div
             key={tab.id}

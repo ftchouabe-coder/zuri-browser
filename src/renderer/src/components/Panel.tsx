@@ -4,6 +4,8 @@ import { Icon } from './Icons'
 interface PanelProps {
   title: string
   subtitle?: string
+  /** Libellé accessible du bouton de fermeture, dans la langue de l'interface. */
+  closeLabel: string
   onClose: () => void
   children: ReactNode
   actions?: ReactNode
@@ -13,6 +15,7 @@ interface PanelProps {
 export function Panel({
   title,
   subtitle,
+  closeLabel,
   onClose,
   children,
   actions,
@@ -28,7 +31,7 @@ export function Panel({
           </div>
           <div className="panel-head-actions">
             {actions}
-            <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">
+            <button type="button" className="icon-btn" onClick={onClose} aria-label={closeLabel} title={closeLabel}>
               <Icon name="close" size={16} />
             </button>
           </div>

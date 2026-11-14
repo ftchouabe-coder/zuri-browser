@@ -3,11 +3,24 @@ import { JsonStore } from './store'
 
 const MAX_ENTRIES = 5000
 
-const store = new JsonStore<HistoryEntry[]>('history.json', [], (raw) => {
+function normalizeHistory(raw: unknown): HistoryEntry[] {
   if (!Array.isArray(raw)) return []
   return raw
-    .filter((item): item is HistoryEntry => !!item && typeof item.url === 'string')
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .filter((item) => typeof item.url === 'string' && /^https?:/i.test(item.url))
     .slice(0, MAX_ENTRIES)
+    .map((item) => ({
+      url: item.url as string,
+      title: typeof item.title === 'string' ? item.title.slice(0, 500) : (item.url as string),
+      visitedAt: typeof item.visitedAt === 'number' ? item.visitedAt : 0,
+      visits: typeof item.visits === 'number' && item.visits > 0 ? Math.floor(item.visits) : 1
+    }))
+}
+
+// Historique chiffré au repos (safeStorage / DPAPI).
+const store = new JsonStore<HistoryEntry[]>('history.json', [], {
+  encrypted: true,
+  normalize: normalizeHistory
 })
 
 function persist(entries: HistoryEntry[]): void {

@@ -12,7 +12,7 @@
 
 - **Vie privée par défaut** : anti-pub et anti-trace actifs, HTTPS-only, DNS chiffré (DoH), cookies tiers bloqués, référents tronqués.
 - **Zéro compte obligatoire** : aucune inscription, aucune synchronisation distante, aucun identifiant publicitaire.
-- **Tout en local** : favoris, historique, téléchargements et réglages sont stockés dans des fichiers JSON sur votre disque.
+- **Tout en local** : favoris, historique et session sont stockés sur votre disque, **chiffrés** avec la protection du système (DPAPI sous Windows) ; seuls les réglages restent en clair.
 - **Identité assumée** : palette « Terre & indigo » (indigo, terracotta, acacia, sable, or), contrastes WCAG AA, pas de folklore.
 - **Bilingue FR / EN**, thème clair / sombre / système, interface entièrement en français au premier lancement.
 
@@ -22,7 +22,9 @@
 - Omnibox intelligente : URL, recherche (DuckDuckGo, Startpage, Brave, Qwant, Google, Bing), historique navigable au clavier.
 - Navigation complète : précédent/suivant, rechargement, rechargement sans cache, arrêt, zoom, recherche dans la page.
 - Favoris, historique, téléchargements, panneaux de gestion.
-- Bouclier réseau : anti-pub/anti-trace (`@ghostery/adblocker`), filtrage cosmétique, économie de données, HTTPS-only avec possibilité de continuer en HTTP ponctuellement.
+- Bouclier réseau : anti-pub/anti-trace (`@ghostery/adblocker-electron`), filtrage cosmétique dynamique et scriptlets, économie de données, HTTPS-only avec possibilité de continuer en HTTP ponctuellement.
+- Protection anti-phishing et anti-malware : les sites signalés sont bloqués avant chargement, avec une page d’avertissement. Les listes sont vérifiées **sur votre appareil**, aucune adresse visitée n’est transmise.
+- Fenêtres surgissantes ouvertes en onglet en gardant le lien avec la page d’origine (connexions Google, Microsoft, paiements…), rafales bloquées et signalées dans la barre d’adresse.
 - Permissions sensibles (caméra, micro, géolocalisation, notifications, presse-papiers, MIDI) demandées à l’origine, mémorisées localement, réinitialisables.
 - Effacement des données (historique, cookies, cache, tout) et effacement à la fermeture en option.
 - Page d’accueil, page d’erreur interne, menus natifs FR/EN, raccourcis clavier.
@@ -83,7 +85,8 @@ Points d’architecture :
 - Les listes de filtres nécessitent un accès réseau au premier lancement ; ensuite elles sont mises en cache.
 - Pas encore de signature de code : Windows SmartScreen peut afficher un avertissement au premier lancement de l’installeur.
 - Mises à jour automatiques via GitHub Releases pour la version installée uniquement : la version portable doit être remplacée à la main.
-- Pas de protection anti-phishing de type Safe Browsing (non fournie par Electron).
+- La protection anti-phishing repose sur des listes publiques rafraîchies toutes les 12 h, et non sur un service en temps réel comme Google Safe Browsing (non fourni par Electron) : un site très récent peut ne pas encore y figurer.
+- Les données chiffrées sont liées à votre compte Windows : copier le profil sur une autre machine ne permet pas de les relire.
 - En développement (`electron .`), les données sont écrites dans `%APPDATA%\Electron\data` ; une version packagée utilise `%APPDATA%\Zuri\data`.
 - Le rendu de certaines pages complexes peut différer de Chrome selon les protections activées.
 
@@ -93,8 +96,11 @@ Zuri est distribué sous licence **MIT** — voir [`LICENSE`](LICENSE).
 
 - [Electron](https://www.electronjs.org/) — MIT ; Chromium — BSD.
 - [React](https://react.dev/) — MIT.
-- [`@ghostery/adblocker`](https://github.com/ghostery/adblocker) — MPL-2.0 (fichiers non modifiés).
+- [`@ghostery/adblocker`, `@ghostery/adblocker-electron` et son préchargement](https://github.com/ghostery/adblocker) — MPL-2.0 (fichiers non modifiés).
+- [`tldts`](https://github.com/remusao/tldts) et [`electron-updater`](https://github.com/electron-userland/electron-builder) — MIT.
 - Listes **EasyList** et **EasyPrivacy** — CC BY-SA 3.0, © leurs auteurs respectifs ; elles sont téléchargées à l’exécution et ne sont pas redistribuées avec Zuri.
+- Listes **Fanboy Cookie Monster** et **Fanboy Annoyance** — CC BY-SA 3.0, téléchargées à l’exécution.
+- Listes de sécurité [malware-filter](https://gitlab.com/malware-filter) (téléchargées à l’exécution, non redistribuées) : **urlhaus-filter** (données URLhaus, CC0) et **phishing-filter** (filtres CC BY-SA 4.0, données OpenPhish et PhishTank mises à disposition gratuitement par leurs auteurs). Ces projets ne sont pas affiliés à Zuri.
 - `resources/base-filters.txt` — CC0 1.0 (liste maison de secours).
 
 Zuri n’est affilié ni à Ghostery, ni à EasyList, ni à aucun fournisseur de recherche ou de DNS.

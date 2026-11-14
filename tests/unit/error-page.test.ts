@@ -38,6 +38,37 @@ describe('errorPage', () => {
   })
 })
 
+describe('errorPage — site signalé', () => {
+  const url = 'https://banque-faux.example/connexion'
+
+  it('affiche l’avertissement adapté, sans proposer « Réessayer »', () => {
+    const phishing = errorPage(url, -20, '', '', fr, { kind: 'phishing', token: TOKEN })
+    expect(phishing).toContain('class="danger"')
+    expect(phishing).toContain('hameçonnage')
+    expect(phishing).not.toContain('btn primary" href="https://')
+    expect(phishing).toContain('href="zuri://action/back"')
+    const malware = errorPage(url, -20, '', '', { language: 'en' }, { kind: 'malware', token: TOKEN })
+    expect(malware).toContain('This site distributes malware')
+  })
+
+  it('n’offre de continuer qu’avec un jeton valide', () => {
+    expect(errorPage(url, -20, '', '', fr, { kind: 'phishing', token: TOKEN })).toContain(
+      `zuri://action/proceed-unsafe?t=${TOKEN}`
+    )
+    expect(errorPage(url, -20, '', '', fr, { kind: 'phishing', token: 'x"><script>' })).not.toContain(
+      'proceed-unsafe'
+    )
+  })
+
+  it('reste sans script et échappe l’URL signalée', () => {
+    const html = errorPage('https://x.example/"><script>alert(1)</script>', -20, '', '', fr, {
+      kind: 'malware',
+      token: TOKEN
+    })
+    expect(html).not.toMatch(/<script/i)
+  })
+})
+
 describe('PAGE_HEADERS', () => {
   it('interdit scripts et intégration dans un cadre', () => {
     const csp = PAGE_HEADERS['content-security-policy']

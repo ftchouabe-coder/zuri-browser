@@ -60,6 +60,11 @@ export default function App(): JSX.Element {
 
   const t = useMemo(() => translator(settings.language), [settings.language])
 
+  // Langue du document : lecteurs d'écran, césure et correcteur suivent le réglage.
+  useEffect(() => {
+    document.documentElement.lang = settings.language
+  }, [settings.language])
+
   const activeTab = snapshot?.tabs.find((tab) => tab.id === snapshot.activeId) ?? null
 
   // --- Amorçage ------------------------------------------------------------

@@ -17,7 +17,7 @@ export function AboutPanel({ info, settings, privacy, t, onClose }: AboutPanelPr
   const dns = DNS_PROVIDERS.find((item) => item.id === settings.dns)?.name ?? '—'
 
   return (
-    <Panel title={t('about.title')} onClose={onClose}>
+    <Panel closeLabel={t('common.close')} title={t('about.title')} onClose={onClose}>
       <div className="about-hero">
         <span className="about-mark">Z</span>
         <div>

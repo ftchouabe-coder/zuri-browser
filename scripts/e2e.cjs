@@ -8,14 +8,32 @@ const { app, session, webContents, BrowserWindow } = require('electron')
 const http = require('node:http')
 const { join } = require('node:path')
 const { tmpdir } = require('node:os')
-const { mkdirSync, readFileSync, rmSync } = require('node:fs')
+const { mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
+const { FiltersEngine } = require('@ghostery/adblocker')
 
 const profile = join(tmpdir(), 'zuri-e2e-profile')
 const downloadsDir = join(tmpdir(), 'zuri-e2e-downloads')
 rmSync(profile, { recursive: true, force: true })
 rmSync(downloadsDir, { recursive: true, force: true })
 mkdirSync(downloadsDir, { recursive: true })
+
+// Listes de sécurité de test, déposées comme un cache frais : aucun site réel n'est visé.
+mkdirSync(join(profile, 'adblock'), { recursive: true })
+const seedEngine = (file, rule) =>
+  writeFileSync(join(profile, 'adblock', file), FiltersEngine.parse(rule, { loadCosmeticFilters: false }).serialize())
+seedEngine('phishing.bin', '/zuri-e2e-phish/*')
+seedEngine('malware.bin', '/zuri-e2e-malware/*')
+
+// Ancien fichier de favoris en clair : doit être relu puis réécrit chiffré.
+mkdirSync(join(profile, 'data'), { recursive: true })
+writeFileSync(
+  join(profile, 'data', 'bookmarks.json'),
+  JSON.stringify([{ id: 'graine', title: 'Graine', url: 'https://example.com/graine', createdAt: 1 }])
+)
 app.setPath('userData', profile)
+// Nom de domaine fictif résolu vers le serveur local : EasyList désactive le masquage
+// générique sur localhost / 127.0.0.1, il faut donc un « vrai » nom pour le tester.
+app.commandLine.appendSwitch('host-resolver-rules', 'MAP zuri-e2e.test 127.0.0.1')
 require('../out/main/index.js')
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -38,6 +56,21 @@ const server = http.createServer((req, res) => {
     pixelHits.push({ from: url.searchParams.get('from'), cookie: req.headers.cookie ?? null })
     res.writeHead(200, { 'content-type': 'image/png', 'set-cookie': `tp_${url.searchParams.get('from')}=1; Path=/` })
     res.end(PNG)
+  } else if (url.pathname.startsWith('/zuri-e2e-')) {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<!doctype html><meta charset="utf-8"><title>page signalée</title>')
+  } else if (url.pathname === '/opener') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end("<!doctype html><meta charset='utf-8'><title>opener</title><script>addEventListener('message', (e) => { document.title = 'reçu:' + e.data })</script>")
+  } else if (url.pathname === '/popup') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end("<!doctype html><title>popup</title><script>window.opener && window.opener.postMessage('pong', '*')</script>")
+  } else if (url.pathname === '/cosmetic') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end(
+      '<!doctype html><title>cosmetic</title><div id="banner" class="ad-slot">pub</div><p id="ok">contenu</p>' +
+        "<script>setTimeout(() => { const d = document.createElement('div'); d.id = 'late'; d.className = 'ad-slot'; d.textContent = 'pub'; document.body.append(d) }, 400)</script>"
+    )
   } else if (url.pathname === '/essai.exe') {
     res.writeHead(200, {
       'content-type': 'application/octet-stream',
@@ -141,6 +174,81 @@ app.whenReady().then(async () => {
     }
     check('Téléchargement marqué « venant d’Internet »', dl.state === 'completed' && /ZoneId=3/.test(zone), zone.trim())
 
+    // --- Protection anti-phishing / anti-malware --------------------------------------
+    for (const [kind, path] of [['phishing', 'zuri-e2e-phish/login'], ['malware', 'zuri-e2e-malware/setup']]) {
+      await tab.loadURL(`http://127.0.0.1:${port}/${path}`).catch(() => {})
+      await wait(1500)
+      const warned = decodeURIComponent(tab.getURL())
+      const info = await tab.executeJavaScript(`({
+        danger: document.body.classList.contains('danger'),
+        retry: Boolean(document.querySelector('a.primary[href^="http"]')),
+        proceed: document.querySelector('a[href^="zuri://action/proceed-unsafe"]')?.getAttribute('href') ?? null
+      })`)
+      check(
+        `Avertissement ${kind} affiché`,
+        warned.includes(`threat=${kind}`) && info.danger && !info.retry && /t=[0-9a-f-]{36}$/.test(info.proceed ?? ''),
+        { url: warned.slice(0, 90), info }
+      )
+    }
+    await tab.executeJavaScript(`document.querySelector('a[href^="zuri://action/proceed-unsafe"]').click()`)
+    await wait(1500)
+    check('« Ignorer l’avertissement » ouvre la page', tab.getURL().endsWith('/zuri-e2e-malware/setup'), tab.getURL())
+    await tab.executeJavaScript("location.href = 'zuri://action/proceed-unsafe?t=00000000-0000-0000-0000-000000000000'")
+    await wait(600)
+    check('Lien d’action forgé par une page ignoré', tab.getURL().endsWith('/zuri-e2e-malware/setup'), tab.getURL())
+
+    // --- Filtrage cosmétique (préchargement adblocker-electron, règles dynamiques) -----
+    await zuri('window.zuri.settings.update({ httpsOnly: false })')
+    await tab.loadURL(`http://zuri-e2e.test:${port}/cosmetic`).catch(() => {})
+    await wait(2500)
+    await zuri('window.zuri.settings.update({ httpsOnly: true })')
+    const hidden = await tab.executeJavaScript(`({
+      banner: getComputedStyle(document.getElementById('banner')).display,
+      dynamic: document.getElementById('late') ? getComputedStyle(document.getElementById('late')).display : 'absent',
+      content: getComputedStyle(document.getElementById('ok')).display
+    })`)
+    check(
+      'Emplacements publicitaires masqués (y compris ajoutés après coup)',
+      hidden.banner === 'none' && hidden.dynamic === 'none' && hidden.content !== 'none',
+      hidden
+    )
+
+    // --- Fenêtres surgissantes : opener conservé, rafales limitées --------------------
+    await tab.loadURL(`http://127.0.0.1:${port}/opener`).catch(() => {})
+    await wait(800)
+    const before = (await zuri('window.zuri.tabs.snapshot()')).tabs.length
+    await tab.executeJavaScript("window.open('/popup'); true", true)
+    await wait(2000)
+    const afterPopup = (await zuri('window.zuri.tabs.snapshot()')).tabs.length
+    check('Popup ouvert en onglet avec window.opener', afterPopup === before + 1 && tab.getTitle() === 'reçu:pong', {
+      before,
+      afterPopup,
+      title: tab.getTitle()
+    })
+    await tab.executeJavaScript("for (let i = 0; i < 8; i++) window.open('about:blank'); true", true)
+    await wait(1200)
+    const burst = await zuri('window.zuri.tabs.snapshot()')
+    const openerState = burst.tabs.find((t) => t.url.endsWith('/opener'))
+    check('Rafale de popups bloquée et signalée', burst.tabs.length <= afterPopup + 1 && (openerState?.popupsBlocked ?? 0) >= 7, {
+      tabs: burst.tabs.length,
+      blocked: openerState?.popupsBlocked
+    })
+    for (const extra of burst.tabs.filter((t) => t.id !== openerState?.id && !t.url.endsWith('/opener')).slice(0)) {
+      if (extra.url === '' || extra.url.endsWith('/popup') || extra.url === 'about:blank') {
+        await zuri(`window.zuri.tabs.close(${JSON.stringify(extra.id)})`)
+      }
+    }
+
+    // --- Chiffrement au repos ---------------------------------------------------------
+    const marks = await zuri('window.zuri.data.bookmarks().then(b => b.map(x => x.url))')
+    const bookmarkFile = readFileSync(join(profile, 'data', 'bookmarks.json'))
+    check(
+      'Favoris en clair relus puis réécrits chiffrés',
+      marks.includes('https://example.com/graine') && bookmarkFile.subarray(0, 6).toString() === 'ZENC1\n' && !bookmarkFile.includes('graine'),
+      { marks, head: bookmarkFile.subarray(0, 6).toString() }
+    )
+    check('Langue du document', (await zuri('document.documentElement.lang')) === 'fr')
+
     // --- Schémas, réglages et validation IPC ------------------------------------------
     const search = await zuri("window.zuri.app.searchUrl('javascript:alert(1)')")
     check('javascript: tapé → recherche', search.startsWith('https://duckduckgo.com/'), search)
@@ -188,6 +296,13 @@ app.whenReady().then(async () => {
     await wait(2500)
     const entry = await zuri("window.zuri.data.history().then(h => h.find(e => e.url === 'https://example.net/'))")
     check('Une visite comptée une seule fois, titre correct', entry?.visits === 1 && entry?.title !== 'https://example.net/', entry)
+    await wait(600)
+    const historyFile = readFileSync(join(profile, 'data', 'history.json'))
+    check(
+      'Historique chiffré sur le disque',
+      historyFile.subarray(0, 6).toString() === 'ZENC1\n' && !historyFile.includes('example.net'),
+      historyFile.subarray(0, 12).toString()
+    )
   } catch (error) {
     check('exception', false, String((error && error.stack) || error))
   }

@@ -59,6 +59,7 @@ export function SettingsPanel({
 
   return (
     <Panel
+      closeLabel={t('common.close')}
       title={t('settings.title')}
       subtitle={t('settings.saved')}
       onClose={onClose}
@@ -143,6 +144,18 @@ export function SettingsPanel({
           </h2>
 
           <Row
+            title={t('settings.safeBrowsing')}
+            description={t('settings.safeBrowsingDesc')}
+            control={
+              <Switch
+                checked={settings.safeBrowsing}
+                label={t('settings.safeBrowsing')}
+                onChange={(checked) => void onChange({ safeBrowsing: checked })}
+              />
+            }
+          />
+
+          <Row
             title={t('settings.adblock')}
             description={t('settings.adblockDesc')}
             control={
@@ -214,7 +227,7 @@ export function SettingsPanel({
               >
                 {DNS_PROVIDERS.map((provider) => (
                   <option key={provider.id} value={provider.id}>
-                    {provider.name}
+                    {provider.id === 'off' ? t('settings.dnsSystem') : provider.name}
                   </option>
                 ))}
               </select>

@@ -23,9 +23,12 @@ import { initUpdater } from './updater'
 app.setName('Zuri')
 if (process.platform === 'win32') app.setAppUserModelId('af.zuri.browser')
 
-const sessionStore = new JsonStore<string[]>('session.json', [], (raw) =>
-  Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : []
-)
+// Onglets de la dernière session, chiffrés au repos (safeStorage / DPAPI).
+const sessionStore = new JsonStore<string[]>('session.json', [], {
+  encrypted: true,
+  normalize: (raw) =>
+    Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : []
+})
 
 let mainWindow: BrowserWindow | null = null
 let tabs: TabManager | null = null

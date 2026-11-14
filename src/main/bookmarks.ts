@@ -3,7 +3,7 @@ import type { Bookmark } from '@shared/types'
 import { JsonStore } from './store'
 import { hostOf } from './search'
 
-const store = new JsonStore<Bookmark[]>('bookmarks.json', [], (raw) => {
+function normalizeBookmarks(raw: unknown): Bookmark[] {
   if (!Array.isArray(raw)) return []
   return raw
     .filter((item): item is Bookmark => !!item && typeof item.url === 'string')
@@ -13,6 +13,12 @@ const store = new JsonStore<Bookmark[]>('bookmarks.json', [], (raw) => {
       url: item.url,
       createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now()
     }))
+}
+
+// Favoris chiffrés au repos (safeStorage / DPAPI).
+const store = new JsonStore<Bookmark[]>('bookmarks.json', [], {
+  encrypted: true,
+  normalize: normalizeBookmarks
 })
 
 export function listBookmarks(): Bookmark[] {

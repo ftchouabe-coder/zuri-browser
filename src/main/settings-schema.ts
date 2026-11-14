@@ -40,6 +40,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     dns,
     adblock: bool('adblock'),
     cosmeticFilters: bool('cosmeticFilters'),
+    safeBrowsing: bool('safeBrowsing'),
     blockThirdPartyCookies: bool('blockThirdPartyCookies'),
     httpsOnly: bool('httpsOnly'),
     stripReferrer: bool('stripReferrer'),

@@ -352,6 +352,7 @@ export function registerIpc(): void {
     () => ({
       totalBlocked: privacyShield.totalBlocked,
       ready: privacyShield.ready,
+      securityReady: privacyShield.securityReady,
       lastUpdate: privacyShield.lastUpdate
     }),
     none

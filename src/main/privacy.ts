@@ -2,40 +2,58 @@ import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
   net,
   session as electronSession,
   webContents,
+  type IpcMainInvokeEvent,
   type Session,
   type WebContents
 } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FiltersEngine, Request, type RequestType } from '@ghostery/adblocker'
+import { ElectronBlocker } from '@ghostery/adblocker-electron'
 import { isThirdParty } from './cookie-policy'
 import { getSettings } from './settings'
 
 /**
  * Bouclier réseau de Zuri.
  *
- * Un seul gestionnaire `webRequest` par événement et par session : le blocage
- * publicitaire, l'économie de données et l'HTTPS-only sont chaînés ici, ce qui
- * évite les conflits de handlers (Electron n'en autorise qu'un par événement).
+ * Electron n'autorise qu'un gestionnaire `webRequest` par événement et par session :
+ * protection anti-phishing/malware, HTTPS-only, anti-pub, économie de données et
+ * cookies tiers sont donc chaînés ici. Le moteur anti-pub est celui de
+ * `@ghostery/adblocker-electron`, mais ses méthodes sont appelées depuis nos handlers
+ * (au lieu de `enableBlockingInSession`, qui écraserait ceux de Zuri).
  */
 
-type AdblockerRequestType = RequestType
-
-const FILTER_LISTS = [
+const AD_LISTS = [
   'https://easylist.to/easylist/easylist.txt',
   'https://easylist.to/easylist/easyprivacy.txt',
   'https://secure.fanboy.co.nz/fanboy-cookiemonster.txt',
   'https://easylist.to/easylist/fanboy-annoyance.txt'
 ]
 
-const CACHE_MAX_AGE_MS = 4 * 24 * 60 * 60 * 1000
+/** Listes de sécurité (téléchargées à l'exécution, non redistribuées). */
+const PHISHING_LISTS = ['https://malware-filter.gitlab.io/malware-filter/phishing-filter.txt']
+const MALWARE_LISTS = ['https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-online.txt']
+
+const DAY = 24 * 60 * 60 * 1000
+const REFRESH_TICK_MS = 3 * 60 * 60 * 1000
+const UNSAFE_ALLOW_MS = 10 * 60 * 1000
 const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i
 
-function mapResourceType(type: string): AdblockerRequestType {
-  return type as AdblockerRequestType
+const COSMETIC_CHANNEL = '@ghostery/adblocker/inject-cosmetic-filters'
+const MUTATION_CHANNEL = '@ghostery/adblocker/is-mutation-observer-enabled'
+
+export type ThreatKind = 'phishing' | 'malware'
+
+interface RequestLike {
+  url: string
+  resourceType?: string
+  referrer?: string
+  webContents?: WebContents
+  webContentsId?: number
 }
 
 /**
@@ -43,11 +61,7 @@ function mapResourceType(type: string): AdblockerRequestType {
  * le référent. Le référent seul ne suffit pas : il est vide dès qu'un site impose
  * `Referrer-Policy: no-referrer`, ce qui laissait passer les cookies tiers.
  */
-function topLevelUrl(details: {
-  webContents?: WebContents
-  webContentsId?: number
-  referrer?: string
-}): string | null {
+function topLevelUrl(details: RequestLike): string | null {
   let contents = details.webContents
   if (!contents && typeof details.webContentsId === 'number') {
     contents = webContents.fromId(details.webContentsId) ?? undefined
@@ -57,21 +71,151 @@ function topLevelUrl(details: {
   return details.referrer || null
 }
 
+function toRequest(details: RequestLike): Request {
+  return Request.fromRawDetails({
+    type: (details.resourceType || 'other') as RequestType,
+    url: details.url,
+    // Sans référent (Referrer-Policy: no-referrer), la page de l'onglet fait foi :
+    // sinon les règles « $third-party » ne s'appliqueraient plus.
+    sourceUrl: details.referrer || topLevelUrl(details) || undefined
+  })
+}
+
+/**
+ * Un jeu de listes compilé en moteur, mis en cache sur disque (binaire Ghostery) et
+ * rafraîchi périodiquement.
+ */
+class FilterSet<E extends FiltersEngine> {
+  engine: E | null = null
+  loadedAt = 0
+  private refreshing = false
+
+  constructor(
+    private readonly label: string,
+    private readonly file: string,
+    private readonly lists: string[],
+    private readonly maxAgeMs: number,
+    private readonly build: (text: string) => E,
+    private readonly load: (buffer: Uint8Array) => E,
+    private readonly fallback: () => string = () => ''
+  ) {}
+
+  private get stale(): boolean {
+    return !this.engine || Date.now() - this.loadedAt > this.maxAgeMs
+  }
+
+  /** Cache d'abord ; on n'attend le réseau que s'il n'y a aucun cache. */
+  async init(): Promise<void> {
+    try {
+      if (existsSync(this.file)) {
+        this.engine = this.load(readFileSync(this.file))
+        this.loadedAt = statSync(this.file).mtimeMs
+      }
+    } catch (error) {
+      console.warn(`[privacy] cache ${this.label} illisible`, error)
+    }
+    if (!this.engine) await this.refresh()
+    else if (this.stale) void this.refresh()
+  }
+
+  refreshIfStale(): void {
+    if (this.stale) void this.refresh()
+  }
+
+  private async refresh(): Promise<void> {
+    if (this.refreshing) return
+    this.refreshing = true
+    try {
+      const remote: string[] = []
+      for (const url of this.lists) {
+        try {
+          const response = await net.fetch(url, { signal: AbortSignal.timeout(30_000) })
+          if (response.ok) remote.push(await response.text())
+        } catch {
+          /* liste indisponible : on continue avec les autres */
+        }
+      }
+      // Aucune liste distante et un moteur existe : on le garde plutôt qu'un moteur appauvri.
+      if (!remote.length && this.engine) return
+      const local = this.fallback()
+      const texts = local ? [...remote, local] : remote
+      if (!texts.length) return
+      const engine = this.build(texts.join('\n'))
+      this.engine = engine
+      this.loadedAt = Date.now()
+      writeFileSync(this.file, engine.serialize())
+      const { networkFilters, cosmeticFilters } = engine.getFilters()
+      console.info(
+        `[privacy] ${this.label} : ${networkFilters.length} règles réseau, ${cosmeticFilters.length} cosmétiques`
+      )
+    } catch (error) {
+      console.warn(`[privacy] mise à jour ${this.label} impossible`, error)
+    } finally {
+      this.refreshing = false
+    }
+  }
+}
+
 export interface BlockedListener {
   (webContentsId: number, tabCount: number, total: number): void
 }
 
 export class PrivacyShield {
-  private engine: FiltersEngine | null = null
-  private engineLoadedAt = 0
-  private refreshing = false
+  private readonly cacheDir = join(app.getPath('userData'), 'adblock')
+  private readonly ads: FilterSet<ElectronBlocker>
+  private readonly phishing: FilterSet<FiltersEngine>
+  private readonly malware: FilterSet<FiltersEngine>
   private blockedTotal = 0
   private blockedByWebContents = new Map<number, number>()
   private allowInsecure = new Set<string>()
+  /** Sites signalés que l'utilisateur a choisi d'ouvrir : clé `${webContentsId}|${hôte}`. */
+  private allowUnsafe = new Map<string, number>()
+  /** Dernière menace bloquée par onglet, lue pour afficher la page d'avertissement. */
+  private pendingThreats = new Map<number, { url: string; kind: ThreatKind }>()
   private installed = new WeakSet<Session>()
+  private ipcReady = false
+  private refreshTimer: NodeJS.Timeout | null = null
   private onBlocked: BlockedListener = () => {}
 
-  constructor(private readonly cacheDir = join(app.getPath('userData'), 'adblock')) {}
+  constructor() {
+    const bundled = (): string => {
+      const file = join(app.getAppPath(), 'resources', 'base-filters.txt')
+      return existsSync(file) ? readFileSync(file, 'utf8') : ''
+    }
+    const plain = (text: string): FiltersEngine =>
+      FiltersEngine.parse(text, { enableCompression: true, loadCosmeticFilters: false })
+    this.ads = new FilterSet(
+      'anti-pub',
+      join(this.cacheDir, 'engine.bin'),
+      AD_LISTS,
+      4 * DAY,
+      (text) =>
+        ElectronBlocker.parse(text, {
+          enableCompression: true,
+          loadCosmeticFilters: true,
+          loadNetworkFilters: true,
+          enableMutationObserver: true
+        }),
+      (buffer) => ElectronBlocker.deserialize(buffer),
+      bundled
+    )
+    this.phishing = new FilterSet(
+      'anti-phishing',
+      join(this.cacheDir, 'phishing.bin'),
+      PHISHING_LISTS,
+      DAY / 2,
+      plain,
+      (buffer) => FiltersEngine.deserialize(buffer)
+    )
+    this.malware = new FilterSet(
+      'anti-malware',
+      join(this.cacheDir, 'malware.bin'),
+      MALWARE_LISTS,
+      DAY / 2,
+      plain,
+      (buffer) => FiltersEngine.deserialize(buffer)
+    )
+  }
 
   setBlockedListener(listener: BlockedListener): void {
     this.onBlocked = listener
@@ -82,73 +226,27 @@ export class PrivacyShield {
   }
 
   get ready(): boolean {
-    return this.engine !== null
+    return this.ads.engine !== null
+  }
+
+  get securityReady(): boolean {
+    return this.phishing.engine !== null && this.malware.engine !== null
   }
 
   get lastUpdate(): number {
-    return this.engineLoadedAt
+    return this.ads.loadedAt
   }
 
-  /** Charge le moteur (cache disque d'abord, réseau en arrière-plan). */
   async init(): Promise<void> {
     if (!existsSync(this.cacheDir)) mkdirSync(this.cacheDir, { recursive: true })
-    this.loadFromCache()
-    if (!this.engine) await this.buildFromNetwork()
-    const cache = join(this.cacheDir, 'engine.bin')
-    if (existsSync(cache) && Date.now() - statSync(cache).mtimeMs > CACHE_MAX_AGE_MS) {
-      void this.buildFromNetwork()
-    }
-  }
-
-  private loadFromCache(): void {
-    try {
-      const cache = join(this.cacheDir, 'engine.bin')
-      if (!existsSync(cache)) return
-      const buffer = readFileSync(cache)
-      this.engine = FiltersEngine.deserialize(buffer)
-      this.engineLoadedAt = statSync(cache).mtimeMs
-    } catch (error) {
-      console.warn('[privacy] cache de filtres illisible', error)
-    }
-  }
-
-  private async buildFromNetwork(): Promise<void> {
-    if (this.refreshing) return
-    this.refreshing = true
-    try {
-      const texts: string[] = []
-      for (const url of FILTER_LISTS) {
-        try {
-          const response = await net.fetch(url, { signal: AbortSignal.timeout(20_000) })
-          if (response.ok) texts.push(await response.text())
-        } catch {
-          /* liste indisponible : on continue avec les autres */
-        }
-      }
-      const bundled = join(app.getAppPath(), 'resources', 'base-filters.txt')
-      if (existsSync(bundled)) texts.push(readFileSync(bundled, 'utf8'))
-      if (!texts.length) return
-
-      const engine = FiltersEngine.parse(texts.join('\n'), {
-        enableCompression: true,
-        loadCosmeticFilters: true
-      })
-      this.engine = engine
-      this.engineLoadedAt = Date.now()
-      const cache = join(this.cacheDir, 'engine.bin')
-      writeFileSync(cache, engine.serialize())
-      console.info(
-        '[privacy] filtres chargés :',
-        engine.getFilters().networkFilters.length,
-        'règles réseau,',
-        engine.getFilters().cosmeticFilters.length,
-        'règles cosmétiques'
-      )
-    } catch (error) {
-      console.warn('[privacy] mise à jour des filtres impossible', error)
-    } finally {
-      this.refreshing = false
-      // Propager aux sessions déjà branchées : le handler lit `this.engine` à chaque requête.
+    await Promise.all([this.ads.init(), this.phishing.init(), this.malware.init()])
+    if (!this.refreshTimer) {
+      this.refreshTimer = setInterval(() => {
+        this.ads.refreshIfStale()
+        this.phishing.refreshIfStale()
+        this.malware.refreshIfStale()
+      }, REFRESH_TICK_MS)
+      this.refreshTimer.unref?.()
     }
   }
 
@@ -166,6 +264,10 @@ export class PrivacyShield {
 
   resetFor(webContentsId: number): void {
     this.blockedByWebContents.delete(webContentsId)
+    this.pendingThreats.delete(webContentsId)
+    for (const key of this.allowUnsafe.keys()) {
+      if (key.startsWith(`${webContentsId}|`)) this.allowUnsafe.delete(key)
+    }
   }
 
   /** Autorise un chargement HTTP en clair, une seule fois (bouton « Continuer en HTTP »). */
@@ -174,20 +276,80 @@ export class PrivacyShield {
     setTimeout(() => this.allowInsecure.delete(url), 30_000).unref?.()
   }
 
+  /** Ouverture malgré l'avertissement : autorisée pour cet onglet et cet hôte, 10 minutes. */
+  allowUnsafeFor(webContentsId: number, url: string): void {
+    try {
+      const host = new URL(url).hostname
+      this.allowUnsafe.set(`${webContentsId}|${host}`, Date.now() + UNSAFE_ALLOW_MS)
+    } catch {
+      /* URL invalide : rien à autoriser */
+    }
+  }
+
+  /** Menace bloquée pour cet onglet et cette URL (consommée par la page d'avertissement). */
+  takeThreat(webContentsId: number, url: string): ThreatKind | null {
+    const threat = this.pendingThreats.get(webContentsId)
+    if (!threat || threat.url !== url) return null
+    this.pendingThreats.delete(webContentsId)
+    return threat.kind
+  }
+
+  private isUnsafeAllowed(webContentsId: number | undefined, url: string): boolean {
+    if (typeof webContentsId !== 'number') return false
+    try {
+      const key = `${webContentsId}|${new URL(url).hostname}`
+      const expires = this.allowUnsafe.get(key)
+      if (!expires) return false
+      if (expires < Date.now()) {
+        this.allowUnsafe.delete(key)
+        return false
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private threatOf(request: Request): ThreatKind | null {
+    if (this.phishing.engine?.match(request).match) return 'phishing'
+    if (this.malware.engine?.match(request).match) return 'malware'
+    return null
+  }
+
   attach(ses: Session): void {
     if (this.installed.has(ses)) return
     this.installed.add(ses)
     this.attachRequestHandler(ses)
     this.attachHeaderHandlers(ses)
+    this.attachCosmetics(ses)
   }
 
   private attachRequestHandler(ses: Session): void {
     ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
       const settings = getSettings()
       const url = details.url
-
       if (!/^https?:/i.test(url)) return callback({})
 
+      let request: Request | null = null
+      const req = (): Request => (request ??= toRequest(details))
+
+      // 1. Phishing et logiciels malveillants (indépendant de l'anti-pub).
+      if (settings.safeBrowsing && !this.isUnsafeAllowed(details.webContentsId, url)) {
+        try {
+          const kind = this.threatOf(req())
+          if (kind) {
+            this.countBlocked(details.webContentsId)
+            if (details.resourceType === 'mainFrame' && typeof details.webContentsId === 'number') {
+              this.pendingThreats.set(details.webContentsId, { url, kind })
+            }
+            return callback({ cancel: true })
+          }
+        } catch {
+          /* une règle qui échoue ne doit jamais bloquer la navigation */
+        }
+      }
+
+      // 2. HTTPS-only pour la page principale.
       if (details.resourceType === 'mainFrame') {
         try {
           const parsed = new URL(url)
@@ -204,32 +366,28 @@ export class PrivacyShield {
         }
       }
 
-      if (settings.adblock && this.engine) {
+      // 3. Anti-pub / anti-trace (jamais sur la page principale, comme Ghostery).
+      const blocker = this.ads.engine
+      if (settings.adblock && blocker && details.resourceType !== 'mainFrame') {
         try {
-          const request = Request.fromRawDetails({
-            type: mapResourceType(details.resourceType),
-            url,
-            sourceUrl: details.referrer || undefined
-          })
-          const result = this.engine.match(request)
-          if (result?.match) {
+          const { match, redirect } = blocker.match(req())
+          if (match || redirect) {
             this.countBlocked(details.webContentsId)
-            const redirect = result.redirect?.dataUrl ?? result.rewrite?.url
-            if (typeof redirect === 'string' && /^(https?|data):/i.test(redirect)) {
-              return callback({ redirectURL: redirect })
+            const target = redirect?.dataUrl
+            if (typeof target === 'string' && target.startsWith('data:')) {
+              return callback({ redirectURL: target })
             }
             return callback({ cancel: true })
           }
         } catch {
-          /* une règle qui échoue ne doit jamais bloquer la navigation */
+          /* idem */
         }
       }
 
+      // 4. Économie de données.
       if (settings.dataSaver) {
         const type = details.resourceType
-        if (type === 'image' || type === 'media' || type === 'font') {
-          return callback({ cancel: true })
-        }
+        if (type === 'image' || type === 'media' || type === 'font') return callback({ cancel: true })
       }
 
       return callback({})
@@ -268,45 +426,85 @@ export class PrivacyShield {
       callback({ requestHeaders: headers })
     })
 
-    // Un tiers ne doit pas non plus pouvoir *déposer* de cookie via ses réponses.
     ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, (details, callback) => {
+      const settings = getSettings()
       const headers = details.responseHeaders
-      if (
-        !headers ||
-        !getSettings().blockThirdPartyCookies ||
-        details.resourceType === 'mainFrame' ||
-        !isThirdParty(details.url, topLevelUrl(details))
-      ) {
-        return callback({})
-      }
+      if (!headers) return callback({})
       let changed = false
-      for (const name of Object.keys(headers)) {
-        if (name.toLowerCase() === 'set-cookie') {
-          delete headers[name]
-          changed = true
+
+      // Règles « $csp » des listes, ajoutées comme politique *supplémentaire* : les fusionner
+      // dans l'en-tête du site (comme le fait Ghostery) peut affaiblir sa propre CSP.
+      const isDocument = details.resourceType === 'mainFrame' || details.resourceType === 'subFrame'
+      const blocker = this.ads.engine
+      if (settings.adblock && blocker && isDocument) {
+        try {
+          const directives = blocker.getCSPDirectives(toRequest(details))
+          if (directives) {
+            const key =
+              Object.keys(headers).find((name) => name.toLowerCase() === 'content-security-policy') ??
+              'Content-Security-Policy'
+            headers[key] = [...(headers[key] ?? []), directives]
+            changed = true
+          }
+        } catch {
+          /* best-effort */
         }
       }
-      callback(changed ? { responseHeaders: headers } : {})
+
+      // Un tiers ne doit pas non plus pouvoir *déposer* de cookie via ses réponses.
+      if (
+        settings.blockThirdPartyCookies &&
+        details.resourceType !== 'mainFrame' &&
+        isThirdParty(details.url, topLevelUrl(details))
+      ) {
+        for (const name of Object.keys(headers)) {
+          if (name.toLowerCase() === 'set-cookie') {
+            delete headers[name]
+            changed = true
+          }
+        }
+      }
+
+      const response: Electron.HeadersReceivedResponse = changed ? { responseHeaders: headers } : {}
+      callback(response)
     })
   }
 
-  /** Filtrage cosmétique : masque les emplacements publicitaires restants. */
-  async applyCosmetics(contents: WebContents, url: string): Promise<void> {
-    if (!this.engine || !getSettings().cosmeticFilters || !/^https?:/i.test(url)) return
-    if (contents.isDestroyed()) return
-    try {
-      const hostname = new URL(url).hostname
-      const { styles } = this.engine.getCosmeticsFilters({
-        url,
-        hostname,
-        domain: hostname,
-        getBaseRules: true,
-        getRulesFromHostname: true
-      })
-      if (styles && styles.length > 0) await contents.insertCSS(styles, { cssOrigin: 'user' })
-    } catch {
-      /* cosmétique best-effort */
+  /**
+   * Filtrage cosmétique et scriptlets d'`adblocker-electron` : un préchargement isolé
+   * (compatible sandbox) demande les règles au chargement, puis à chaque mutation du DOM.
+   */
+  private attachCosmetics(ses: Session): void {
+    ses.registerPreloadScript({
+      type: 'frame',
+      filePath: require.resolve('@ghostery/adblocker-electron-preload')
+    })
+    if (this.ipcReady) return
+    this.ipcReady = true
+
+    const frameUrlIfAllowed = (event: IpcMainInvokeEvent): string | null => {
+      const settings = getSettings()
+      if (!settings.adblock || !settings.cosmeticFilters || !this.ads.engine) return null
+      // Uniquement depuis un onglet d'une session protégée, avec l'URL réelle du cadre
+      // (et non celle que la page prétend avoir).
+      if (!this.installed.has(event.sender.session)) return null
+      const frameUrl = event.senderFrame?.url ?? ''
+      return /^https?:/i.test(frameUrl) ? frameUrl : null
     }
+
+    type CosmeticMessage = Parameters<ElectronBlocker['onInjectCosmeticFilters']>[2]
+    ipcMain.handle(COSMETIC_CHANNEL, async (event, _url: unknown, msg: unknown) => {
+      const frameUrl = frameUrlIfAllowed(event)
+      const engine = this.ads.engine
+      if (!frameUrl || !engine) return
+      const payload = msg && typeof msg === 'object' ? (msg as CosmeticMessage) : undefined
+      await engine.onInjectCosmeticFilters(event, frameUrl, payload)
+    })
+    ipcMain.handle(MUTATION_CHANNEL, (event) => {
+      const engine = this.ads.engine
+      if (!frameUrlIfAllowed(event) || !engine) return false
+      return engine.onIsMutationObserverEnabled(event)
+    })
   }
 }
 

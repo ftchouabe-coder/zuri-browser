@@ -22,6 +22,16 @@
 > - **Tests** : 62 tests unitaires (Vitest), suite de bout en bout `npm run test:e2e` de 26 contrôles avec code de sortie, CI GitHub Actions (Windows) et Dependabot.
 >
 > Restent ouverts : E2 (anti-phishing), M2 (popups/opener), M4 (`adblocker-electron`), M5 (chiffrement au repos), M6 (traité en partie), M7, M8, signature de code.
+>
+> **Mise à jour du 14/11/2026 — Sprint 2 appliqué** :
+> - **E2** : listes *urlhaus-filter* (malware) et *phishing-filter* compilées dans deux moteurs dédiés, vérifiés localement à chaque requête (même si l'anti-pub est désactivé), rafraîchis toutes les 12 h. Page d'avertissement sans script ; « Ignorer l'avertissement » exige un jeton à usage unique et n'autorise que cet hôte, dans cet onglet, pendant 10 minutes. Nouveau réglage « Protection contre le phishing et les logiciels malveillants », actif par défaut.
+> - **M2** : `window.open` ouvre un onglet qui garde `window.opener` (via `createWindow` et adoption du `WebContents`), avec sandbox imposée. Limiteur de 2 popups / 5 s et 6 / minute par onglet, compteur visible dans la barre d'adresse.
+> - **M4** : moteur `@ghostery/adblocker-electron` — préchargement isolé compatible sandbox, règles cosmétiques génériques déduites du DOM, `MutationObserver` et scriptlets. Ses méthodes sont appelées depuis les handlers de Zuri (pas de `enableBlockingInSession`, qui les écraserait). L'IPC cosmétique n'accepte que les onglets des sessions protégées et utilise l'URL réelle du cadre. Les règles `$csp` sont ajoutées comme politique supplémentaire au lieu d'être fusionnées dans celle du site (ce qui pouvait l'affaiblir).
+> - **M5** : historique, favoris et session chiffrés au repos avec `safeStorage` (DPAPI), migration automatique des anciens fichiers en clair, et fichier illisible mis de côté au lieu d'être écrasé.
+> - **i18n** : menu contextuel, titre « Nouvel onglet », libellés accessibles, nom du DNS système et attribut `lang` suivent la langue choisie. Code mort supprimé (`confirmQuitWithPrivateTabs`, toasts jamais affichés). Le lien « Code source » pointe vers le dépôt.
+> - **Tests** : 65 tests unitaires et 36 contrôles de bout en bout.
+>
+> Restent ouverts : M7 (exceptions avalées), signature de code, et des pistes pour plus tard : SQLite, mode lecture, coffre de mots de passe, Linux et macOS.
 
 ---
 

@@ -41,6 +41,7 @@ export function DownloadsPanel({
 }: DownloadsPanelProps): JSX.Element {
   return (
     <Panel
+      closeLabel={t('common.close')}
       title={t('downloads.title')}
       subtitle={`${downloads.length}`}
       onClose={onClose}

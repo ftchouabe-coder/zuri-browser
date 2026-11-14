@@ -45,6 +45,7 @@ export function HistoryPanel({
 
   return (
     <Panel
+      closeLabel={t('common.close')}
       title={t('history.title')}
       subtitle={`${filtered.length} ${filtered.length === 1 ? 'page' : 'pages'}`}
       onClose={onClose}

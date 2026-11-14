@@ -22,6 +22,7 @@ export function BookmarksPanel({
 }: BookmarksPanelProps): JSX.Element {
   return (
     <Panel
+      closeLabel={t('common.close')}
       title={t('bookmarks.title')}
       subtitle={`${bookmarks.length} ${bookmarks.length === 1 ? 'favori' : 'favoris'}`}
       onClose={onClose}

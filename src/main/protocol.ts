@@ -1,5 +1,5 @@
 import { protocol, type Session } from 'electron'
-import { errorPage, PAGE_HEADERS } from './error-page'
+import { errorPage, PAGE_HEADERS, type ThreatPage } from './error-page'
 import { getSettings } from './settings'
 
 protocol.registerSchemesAsPrivileged([
@@ -23,8 +23,10 @@ function handleZuriRequest(request: Request): Response {
   const code = Number(parsed.searchParams.get('code') ?? 0)
   const description = (parsed.searchParams.get('desc') ?? '').slice(0, 300)
   const token = parsed.searchParams.get('t') ?? ''
+  const kind = parsed.searchParams.get('threat')
+  const threat: ThreatPage | null = kind === 'phishing' || kind === 'malware' ? { kind, token } : null
 
-  return new Response(errorPage(url, code, description, token, settings), {
+  return new Response(errorPage(url, code, description, threat ? '' : token, settings, threat), {
     headers: PAGE_HEADERS
   })
 }

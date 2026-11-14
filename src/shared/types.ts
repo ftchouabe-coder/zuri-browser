@@ -51,6 +51,7 @@ export interface Settings {
   searchEngine: SearchEngineId
   adblock: boolean
   cosmeticFilters: boolean
+  safeBrowsing: boolean
   blockThirdPartyCookies: boolean
   httpsOnly: boolean
   dns: DnsProviderId
@@ -70,6 +71,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'duckduckgo',
   adblock: true,
   cosmeticFilters: true,
+  safeBrowsing: true,
   blockThirdPartyCookies: true,
   httpsOnly: true,
   dns: 'cloudflare',
@@ -100,6 +102,8 @@ export interface TabState {
   muted: boolean
   zoom: number
   crashed: boolean
+  /** Fenêtres surgissantes bloquées depuis le dernier chargement de la page. */
+  popupsBlocked: number
 }
 
 export interface TabsSnapshot {
@@ -241,7 +245,12 @@ export interface ZuriApi {
     openMenu(x: number, y: number): void
   }
   privacy: {
-    state(): Promise<{ totalBlocked: number; ready: boolean; lastUpdate: number }>
+    state(): Promise<{
+      totalBlocked: number
+      ready: boolean
+      securityReady: boolean
+      lastUpdate: number
+    }>
   }
   on<T = unknown>(event: string, listener: (payload: T) => void): () => void
   platform: string
