@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lang">en</string>
+
+    <string name="address_hint">Search or type an address</string>
+    <string name="shield_desc">Page protection</string>
+    <string name="tabs_desc">Open tabs: %1$d</string>
+    <string name="menu_more">More options</string>
+
+    <string name="menu_new_tab">New tab</string>
+    <string name="menu_new_private_tab">New private tab</string>
+    <string name="menu_forward">Forward</string>
+    <string name="menu_reload">Reload</string>
+    <string name="menu_stop">Stop</string>
+    <string name="menu_share">Share</string>
+    <string name="menu_desktop">Desktop site</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_clear_data">Clear browsing data</string>
+    <string name="menu_close_private">Close private tabs</string>
+
+    <string name="tabs_title">Tabs</string>
+    <string name="tab_new">New tab</string>
+    <string name="tab_private_prefix">Private · %1$s</string>
+    <string name="tab_close">Close tab</string>
+
+    <string name="start_title">New tab</string>
+    <string name="start_tagline">Private, lightweight browsing without tracking.</string>
+    <string name="start_private">Private tab: cookies, cache and history are erased when the last private tab is closed.</string>
+
+    <string name="error_title">Page unavailable</string>
+    <string name="error_heading">This page can’t be displayed</string>
+    <string name="error_message">%1$s is not responding, or the connection was interrupted.</string>
+    <string name="error_retry">Try again</string>
+    <string name="error_back">Back</string>
+    <string name="cert_heading">Connection not secure</string>
+    <string name="cert_message">The certificate for %1$s is not valid. Zuri stopped loading to protect your data.</string>
+    <string name="insecure_heading">This site doesn’t offer a secure connection</string>
+    <string name="insecure_message">%1$s is not available over HTTPS. Over HTTP, what you send can be read or changed on the network.</string>
+    <string name="insecure_continue">Continue over HTTP</string>
+
+    <string name="popup_blocked">Pop-up blocked</string>
+    <string name="external_title">Open another app?</string>
+    <string name="external_message">This page wants to open:\n%1$s</string>
+    <string name="open">Open</string>
+    <string name="cancel">Cancel</string>
+    <string name="no_app">No app can open this link.</string>
+    <string name="share_title">Share link</string>
+    <string name="renderer_gone">The page stopped working and was closed to protect the browser.</string>
+
+    <string name="auth_title">Sign-in required</string>
+    <string name="auth_message">%1$s asks for credentials (%2$s).</string>
+    <string name="auth_user">Username</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_login">Sign in</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_engine">Engine: %1$s</string>
+    <string name="settings_engine_title">Search engine</string>
+    <string name="set_adblock">Block ads and trackers</string>
+    <string name="set_safe">Phishing and malware protection</string>
+    <string name="set_https">HTTPS-only</string>
+    <string name="set_cookies">Block third-party cookies</string>
+    <string name="set_datasaver">Data saver (no images)</string>
+    <string name="set_autoplay">Autoplay videos</string>
+    <string name="set_restore">Reopen tabs on startup</string>
+    <string name="ok">OK</string>
+
+    <string name="clear_title">Clear data?</string>
+    <string name="clear_message">Cookies, cache, site storage and saved credentials will be deleted.</string>
+    <string name="clear_confirm">Clear</string>
+    <string name="cleared">Browsing data cleared</string>
+</resources>

@@ -1,4 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Zuri</string>
+    <string name="lang">fr</string>
+
+    <string name="address_hint">Rechercher ou saisir une adresse</string>
+    <string name="shield_desc">Protection de la page</string>
+    <string name="tabs_desc">Onglets ouverts : %1$d</string>
+    <string name="menu_more">Plus d’options</string>
+
+    <string name="menu_new_tab">Nouvel onglet</string>
+    <string name="menu_new_private_tab">Nouvel onglet privé</string>
+    <string name="menu_forward">Avancer</string>
+    <string name="menu_reload">Actualiser</string>
+    <string name="menu_stop">Arrêter</string>
+    <string name="menu_share">Partager</string>
+    <string name="menu_desktop">Version pour ordinateur</string>
+    <string name="menu_settings">Réglages</string>
+    <string name="menu_clear_data">Effacer les données de navigation</string>
+    <string name="menu_close_private">Fermer les onglets privés</string>
+
+    <string name="tabs_title">Onglets</string>
+    <string name="tab_new">Nouvel onglet</string>
+    <string name="tab_private_prefix">Privé · %1$s</string>
+    <string name="tab_close">Fermer l’onglet</string>
+
+    <string name="start_title">Nouvel onglet</string>
+    <string name="start_tagline">Navigation privée, légère et sans pistage.</string>
+    <string name="start_private">Onglet privé : cookies, cache et historique sont effacés à la fermeture du dernier onglet privé.</string>
+
+    <string name="error_title">Page inaccessible</string>
+    <string name="error_heading">Impossible d’afficher cette page</string>
+    <string name="error_message">%1$s ne répond pas, ou la connexion a été interrompue.</string>
+    <string name="error_retry">Réessayer</string>
+    <string name="error_back">Retour</string>
+    <string name="cert_heading">Connexion non sécurisée</string>
+    <string name="cert_message">Le certificat de %1$s n’est pas valide. Zuri a interrompu le chargement pour protéger vos données.</string>
+    <string name="insecure_heading">Ce site ne propose pas de connexion sécurisée</string>
+    <string name="insecure_message">%1$s n’est pas accessible en HTTPS. En HTTP, ce que vous envoyez peut être lu ou modifié sur le réseau.</string>
+    <string name="insecure_continue">Continuer en HTTP</string>
+
+    <string name="popup_blocked">Fenêtre surgissante bloquée</string>
+    <string name="external_title">Ouvrir une autre application ?</string>
+    <string name="external_message">Cette page veut ouvrir :\n%1$s</string>
+    <string name="open">Ouvrir</string>
+    <string name="cancel">Annuler</string>
+    <string name="no_app">Aucune application ne peut ouvrir ce lien.</string>
+    <string name="share_title">Partager le lien</string>
+    <string name="renderer_gone">La page a cessé de fonctionner : elle a été fermée pour protéger le navigateur.</string>
+
+    <string name="auth_title">Identification requise</string>
+    <string name="auth_message">%1$s demande un identifiant (%2$s).</string>
+    <string name="auth_user">Identifiant</string>
+    <string name="auth_password">Mot de passe</string>
+    <string name="auth_login">Se connecter</string>
+
+    <string name="settings_title">Réglages</string>
+    <string name="settings_engine">Moteur : %1$s</string>
+    <string name="settings_engine_title">Moteur de recherche</string>
+    <string name="set_adblock">Bloquer les publicités et les traqueurs</string>
+    <string name="set_safe">Protection contre le phishing et les logiciels malveillants</string>
+    <string name="set_https">HTTPS uniquement</string>
+    <string name="set_cookies">Bloquer les cookies tiers</string>
+    <string name="set_datasaver">Économiseur de données (sans images)</string>
+    <string name="set_autoplay">Lecture automatique des vidéos</string>
+    <string name="set_restore">Rouvrir les onglets au démarrage</string>
+    <string name="ok">OK</string>
+
+    <string name="clear_title">Effacer les données ?</string>
+    <string name="clear_message">Cookies, cache, stockage des sites et identifiants enregistrés seront supprimés.</string>
+    <string name="clear_confirm">Effacer</string>
+    <string name="cleared">Données de navigation effacées</string>
 </resources>
