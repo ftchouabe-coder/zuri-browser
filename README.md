@@ -32,7 +32,7 @@
 
 ## Démarrage
 
-Prérequis : **Node.js ≥ 20.19** (ou ≥ 22.12) et npm.
+Prérequis : **Node.js ≥ 22.12** et npm (Vitest 5 et la CI utilisent Node 22).
 
 ```bash
 npm install

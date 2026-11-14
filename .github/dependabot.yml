@@ -9,6 +9,12 @@ updates:
     groups:
       electron:
         patterns: ['electron', 'electron-builder', 'electron-updater', 'electron-vite']
+    ignore:
+      # Les types de Node doivent suivre la version de Node embarquée par Electron
+      # (Node 24 pour Electron 45), pas la dernière version de Node : montée manuelle
+      # à chaque changement de version majeure d'Electron.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
