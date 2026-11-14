@@ -2,7 +2,7 @@ package af.zuri.browser
 
 import java.security.SecureRandom
 
-/** Jetons à usage unique pour les boutons des pages internes (expirent après 10 minutes). */
+/** Jetons à usage unique (utilisables depuis le fil réseau de la WebView) pour les boutons des pages internes (expirent après 10 minutes). */
 class InternalActions(private val clock: () -> Long = System::currentTimeMillis) {
     enum class Kind { RETRY, BACK, INSECURE, PROCEED_UNSAFE }
 
@@ -11,6 +11,7 @@ class InternalActions(private val clock: () -> Long = System::currentTimeMillis)
     private val random = SecureRandom()
     private val pending = HashMap<String, Action>()
 
+    @Synchronized
     fun issue(tabId: Int, url: String, kind: Kind): String {
         purge()
         val bytes = ByteArray(16).also(random::nextBytes)
@@ -22,6 +23,7 @@ class InternalActions(private val clock: () -> Long = System::currentTimeMillis)
     fun href(tabId: Int, url: String, kind: Kind): String = "zuri://action?t=" + issue(tabId, url, kind)
 
     /** Consomme le jeton s'il est valide pour cet onglet. */
+    @Synchronized
     fun take(token: String?, tabId: Int): Action? {
         if (token == null || !TOKEN.matches(token)) return null
         val action = pending.remove(token) ?: return null
@@ -29,6 +31,7 @@ class InternalActions(private val clock: () -> Long = System::currentTimeMillis)
         return action
     }
 
+    @Synchronized
     fun forgetTab(tabId: Int) {
         pending.entries.removeAll { it.value.tabId == tabId }
     }

@@ -58,6 +58,15 @@ android {
     }
 }
 
+// La liste de secours CC0 du bureau est embarquée telle quelle (une seule source de vérité).
+val zuriAssets = layout.buildDirectory.dir("generated/zuriAssets")
+val copyBaseFilters by tasks.registering(Copy::class) {
+    from(rootProject.file("../resources/base-filters.txt"))
+    into(zuriAssets)
+}
+android.sourceSets["main"].assets.srcDir(zuriAssets)
+tasks.named("preBuild") { dependsOn(copyBaseFilters) }
+
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }

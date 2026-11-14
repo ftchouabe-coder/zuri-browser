@@ -1,6 +1,7 @@
 package af.zuri.browser
 
 import android.webkit.WebView
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 class Tab(val id: Int, val isPrivate: Boolean, val webView: WebView, val parentId: Int?) {
@@ -24,4 +25,6 @@ class Tab(val id: Int, val isPrivate: Boolean, val webView: WebView, val parentI
     /** Passages en HTTPS : URL https -> (URL http d'origine, instant). */
     val upgrades = HashMap<String, Pair<String, Long>>()
     var certErrorUrl: String? = null
+    /** Hôtes signalés que l'utilisateur a choisi d'ouvrir malgré tout : hôte -> expiration. */
+    val unsafeHosts = ConcurrentHashMap<String, Long>()
 }

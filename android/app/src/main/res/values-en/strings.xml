@@ -69,4 +69,19 @@
     <string name="clear_message">Cookies, cache, site storage and saved credentials will be deleted.</string>
     <string name="clear_confirm">Clear</string>
     <string name="cleared">Browsing data cleared</string>
+
+    <string name="threat_phishing_heading">Reported phishing site</string>
+    <string name="threat_phishing_message">%1$s was reported for trying to steal personal information: passwords, banking or mobile money codes.</string>
+    <string name="threat_malware_heading">Reported dangerous site</string>
+    <string name="threat_malware_message">%1$s was reported for distributing malware.</string>
+    <string name="threat_source">Checked on your device (public malware-filter lists): the address was not sent to anyone.</string>
+    <string name="threat_back">Back to safety</string>
+    <string name="threat_proceed">Ignore the warning (not recommended)</string>
+    <string name="shield_https">Encrypted connection (HTTPS).</string>
+    <string name="shield_http">Unencrypted connection (HTTP): avoid entering personal information.</string>
+    <string name="shield_blocked">Items blocked on this page: %1$d</string>
+    <string name="shield_popups">Pop-ups blocked: %1$d</string>
+    <string name="shield_lists_ready">Phishing and malware lists up to date (%1$s).</string>
+    <string name="shield_lists_pending">Downloading phishing and malware lists…</string>
+    <string name="shield_lists_off">Phishing protection is turned off in settings.</string>
 </resources>

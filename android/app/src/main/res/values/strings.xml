@@ -70,4 +70,19 @@
     <string name="clear_message">Cookies, cache, stockage des sites et identifiants enregistrés seront supprimés.</string>
     <string name="clear_confirm">Effacer</string>
     <string name="cleared">Données de navigation effacées</string>
+
+    <string name="threat_phishing_heading">Site de phishing signalé</string>
+    <string name="threat_phishing_message">%1$s a été signalé comme cherchant à voler des informations personnelles : mots de passe, codes bancaires ou de mobile money.</string>
+    <string name="threat_malware_heading">Site dangereux signalé</string>
+    <string name="threat_malware_message">%1$s a été signalé comme diffusant des logiciels malveillants.</string>
+    <string name="threat_source">Vérification faite sur votre appareil (listes publiques malware-filter) : l’adresse n’a été envoyée à personne.</string>
+    <string name="threat_back">Revenir en lieu sûr</string>
+    <string name="threat_proceed">Ignorer l’avertissement (déconseillé)</string>
+    <string name="shield_https">Connexion chiffrée (HTTPS).</string>
+    <string name="shield_http">Connexion non chiffrée (HTTP) : évitez d’y saisir des informations personnelles.</string>
+    <string name="shield_blocked">Éléments bloqués sur cette page : %1$d</string>
+    <string name="shield_popups">Fenêtres surgissantes bloquées : %1$d</string>
+    <string name="shield_lists_ready">Listes anti-phishing et anti-malware à jour (%1$s).</string>
+    <string name="shield_lists_pending">Listes anti-phishing et anti-malware en cours de téléchargement…</string>
+    <string name="shield_lists_off">Protection anti-phishing désactivée dans les réglages.</string>
 </resources>

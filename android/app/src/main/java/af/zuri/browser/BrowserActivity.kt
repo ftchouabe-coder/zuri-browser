@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Message
 import android.os.SystemClock
 import android.text.InputType
+import android.text.format.DateUtils
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -27,6 +28,8 @@ import android.webkit.HttpAuthHandler
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -47,13 +50,17 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import java.io.ByteArrayInputStream
 import java.net.URISyntaxException
+import java.util.Locale
 
 class BrowserActivity : Activity() {
 
     private lateinit var prefs: Prefs
-    internal var settings = Settings()
+    /** Lu aussi depuis le fil réseau de la WebView (interception des requêtes). */
+    @Volatile internal var settings = Settings()
         private set
+    private val filters: FilterLists by lazy { sharedFilters(this) }
 
     private lateinit var root: View
     private lateinit var toolbar: View
@@ -123,6 +130,7 @@ class BrowserActivity : Activity() {
 
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         registerBackHandler()
+        filters // chargement des listes en tâche de fond
 
         if (settings.restoreSession) restoreSession()
         handleIntent(intent)
@@ -388,8 +396,68 @@ class BrowserActivity : Activity() {
                 tab.loadingUrl = action.url
                 tab.webView.loadUrl(action.url)
             }
-            InternalActions.Kind.PROCEED_UNSAFE -> load(tab, action.url)
+            InternalActions.Kind.PROCEED_UNSAFE -> {
+                // Exception limitée à cet hôte, dans cet onglet, pendant 10 minutes.
+                UrlInput.hostOf(action.url)?.let { tab.unsafeHosts[it] = SystemClock.elapsedRealtime() + UNSAFE_ALLOW_MS }
+                load(tab, action.url)
+            }
         }
+    }
+
+    /**
+     * Fil réseau de la WebView. Sites signalés : page d'avertissement à la place du document
+     * (ou requête vide pour un cadre). Publicités et traqueurs : requête vide, sauf vers le
+     * site de la page elle-même, pour ne pas casser les sites qui hébergent leurs propres outils.
+     */
+    internal fun intercept(tab: Tab, request: WebResourceRequest): WebResourceResponse? {
+        val uri = request.url
+        val scheme = uri.scheme ?: return null
+        if (!scheme.equals("http", true) && !scheme.equals("https", true)) return null
+        val host = uri.host?.lowercase(Locale.ROOT)?.trimEnd('.') ?: return null
+        val url = uri.toString()
+        val config = settings
+
+        if (config.safeBrowsing) {
+            val threat = filters.threatFor(host, url)
+            if (threat != null) {
+                val until = tab.unsafeHosts[host]
+                if (until == null || until < SystemClock.elapsedRealtime()) {
+                    tab.blocked.incrementAndGet()
+                    return if (request.isForMainFrame) threatResponse(tab, url, host, threat) else emptyResponse()
+                }
+            }
+        }
+        if (config.adblock && !request.isForMainFrame && filters.ads.matches(host, url)) {
+            val pageHost = UrlInput.hostOf(tab.pageUrl)
+            if (pageHost == null || DomainSet.siteOf(pageHost) != DomainSet.siteOf(host)) {
+                tab.blocked.incrementAndGet()
+                return emptyResponse()
+            }
+        }
+        return null
+    }
+
+    private fun emptyResponse() = WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+
+    private fun threatResponse(tab: Tab, url: String, host: String, threat: FilterLists.Threat): WebResourceResponse {
+        val phishing = threat == FilterLists.Threat.PHISHING
+        val heading = getString(if (phishing) R.string.threat_phishing_heading else R.string.threat_malware_heading)
+        val body = getString(if (phishing) R.string.threat_phishing_message else R.string.threat_malware_message, host)
+        val html = Pages.message(
+            getString(R.string.lang), heading, heading, body, getString(R.string.threat_source),
+            listOf(
+                Pages.Action(getString(R.string.threat_back), actions.href(tab.id, url, InternalActions.Kind.BACK), primary = true),
+                Pages.Action(getString(R.string.threat_proceed), actions.href(tab.id, url, InternalActions.Kind.PROCEED_UNSAFE))
+            ),
+            Pages.Tone.DANGER
+        )
+        val headers = mapOf(
+            "Content-Security-Policy" to Pages.CSP,
+            "Cache-Control" to "no-store",
+            "Referrer-Policy" to "no-referrer",
+            "X-Content-Type-Options" to "nosniff"
+        )
+        return WebResourceResponse("text/html", "utf-8", 200, "OK", headers, ByteArrayInputStream(html.toByteArray()))
     }
 
     private fun goBack(tab: Tab): Boolean {
@@ -655,7 +723,26 @@ class BrowserActivity : Activity() {
 
     private fun showShield() {
         val tab = current ?: return
-        Toast.makeText(this, getString(R.string.popup_blocked) + " : " + tab.popups.blocked, Toast.LENGTH_SHORT).show()
+        val lines = mutableListOf<String>()
+        if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
+            lines += getString(if (tab.url.startsWith("https://", true)) R.string.shield_https else R.string.shield_http)
+        }
+        lines += getString(R.string.shield_blocked, tab.blocked.get())
+        lines += getString(R.string.shield_popups, tab.popups.blocked)
+        val updated = filters.securityUpdatedAt
+        lines += if (!settings.safeBrowsing) {
+            getString(R.string.shield_lists_off)
+        } else if (updated == 0L) {
+            getString(R.string.shield_lists_pending)
+        } else {
+            getString(R.string.shield_lists_ready, DateUtils.getRelativeTimeSpanString(updated).toString())
+        }
+        AlertDialog.Builder(this)
+            .setTitle(UrlInput.displayHost(tab.url).ifEmpty { getString(R.string.shield_desc) })
+            .setMessage(lines.joinToString("\n\n"))
+            .setPositiveButton(R.string.ok, null)
+            .setNeutralButton(R.string.menu_settings) { _, _ -> showSettings() }
+            .show()
     }
 
     private fun share(url: String) {
@@ -819,6 +906,18 @@ class BrowserActivity : Activity() {
     }
 
     private companion object {
+        @Volatile private var filterLists: FilterLists? = null
+
+        /** Une seule instance par processus, partagée si l'activité est recréée. */
+        fun sharedFilters(activity: Activity): FilterLists =
+            filterLists ?: synchronized(this) {
+                filterLists ?: FilterLists(activity).also {
+                    it.start()
+                    filterLists = it
+                }
+            }
+
+        const val UNSAFE_ALLOW_MS = 10 * 60 * 1000L
         const val REQUEST_FILE = 1
         const val LOOP_WINDOW_MS = 15_000L
         const val M_NEW = 1

@@ -14,6 +14,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.util.Locale
@@ -47,6 +48,10 @@ class ZuriWebViewClient(private val host: BrowserActivity, private val tab: Tab)
             }
         }
     }
+
+    /** Fil réseau : blocage des sites signalés, des publicités et des traqueurs. */
+    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+        host.intercept(tab, request)
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
         if (UrlInput.isHttp(url)) {
