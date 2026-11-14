@@ -1,0 +1,64 @@
+{
+  "name": "zuri-browser",
+  "version": "0.1.0",
+  "description": "Zuri — navigateur web privé aux couleurs africaines",
+  "homepage": "https://github.com/",
+  "author": "Zuri",
+  "license": "MIT",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "smoke": "npm run build && electron scripts/smoke.cjs",
+    "icon": "pwsh -NoProfile -File scripts/make-icon.ps1",
+    "pack": "electron-vite build && electron-builder --win --dir",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "@ghostery/adblocker": "^2.20.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8"
+  },
+  "build": {
+    "appId": "af.zuri.browser",
+    "productName": "Zuri",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Zuri-${version}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "Zuri-${version}-portable.${ext}"
+    }
+  }
+}
