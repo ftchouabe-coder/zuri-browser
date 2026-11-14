@@ -10,7 +10,6 @@ import {
   clearPermissionDecisions,
   privacyShield
 } from './privacy'
-import { registerInternalProtocol } from './protocol'
 import {
   clearPrivateSession,
   getMainSession,
@@ -63,7 +62,6 @@ async function bootstrap(): Promise<void> {
   await Promise.race([privacyShield.init(), new Promise((resolve) => setTimeout(resolve, 2500))])
 
   createWindow()
-  registerInternalProtocol()
   registerIpc()
 }
 

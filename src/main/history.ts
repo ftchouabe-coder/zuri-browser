@@ -58,6 +58,16 @@ export function recordVisit(url: string, title: string): void {
   persist(entries)
 }
 
+/** Met à jour le titre d'une entrée existante sans compter de nouvelle visite. */
+export function updateTitle(url: string, title: string): void {
+  if (!title) return
+  const entries = store.get()
+  const index = entries.findIndex((entry) => entry.url === url)
+  if (index < 0 || entries[index].title === title) return
+  entries[index] = { ...entries[index], title: title.slice(0, 500) }
+  persist(entries)
+}
+
 export function removeHistory(url: string): HistoryEntry[] {
   persist(store.get().filter((entry) => entry.url !== url))
   return listHistory()

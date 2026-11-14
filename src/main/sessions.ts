@@ -1,6 +1,7 @@
 import { session, type Session } from 'electron'
 import { attachDownloads } from './downloads'
 import { hardenSession, privacyShield } from './privacy'
+import { registerInternalProtocol } from './protocol'
 
 export const MAIN_PARTITION = 'persist:zuri'
 export const PRIVATE_PARTITION = 'zuri-private'
@@ -20,19 +21,23 @@ export function initSessions(): void {
   initialized = true
 
   const main = getMainSession()
-  hardenSession(main)
+  hardenSession(main, 'main')
   privacyShield.attach(main)
   attachDownloads(main, false)
+  // `protocol.handle` global ne couvre que la session par défaut : chaque partition
+  // d'onglets doit enregistrer `zuri://` elle-même.
+  registerInternalProtocol(main)
 
   const priv = getPrivateSession()
-  hardenSession(priv)
+  hardenSession(priv, 'private')
   privacyShield.attach(priv)
   attachDownloads(priv, true)
+  registerInternalProtocol(priv)
 }
 
 export async function clearPrivateSession(): Promise<void> {
   const priv = getPrivateSession()
   await priv.clearStorageData()
   await priv.clearCache()
-  privacyShield.clearCounters()
+  await priv.clearAuthCache()
 }

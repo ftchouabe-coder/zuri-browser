@@ -1,7 +1,6 @@
-import { protocol } from 'electron'
+import { protocol, type Session } from 'electron'
 import type { Settings } from '@shared/types'
 import { getSettings } from './settings'
-import { privacyShield } from './privacy'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -39,17 +38,42 @@ const MESSAGES: Record<number, { fr: string; en: string }> = {
   '-501': { fr: 'Connexion non sécurisée refusée', en: 'Insecure connection refused' }
 }
 
-function errorPage(url: string, code: number, description: string, settings: Settings): string {
+/** URL relançable depuis la page d'erreur : uniquement http(s), jamais de schéma actif. */
+function safeRetryTarget(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : ''
+  } catch {
+    return ''
+  }
+}
+
+const TOKEN_RE = /^[0-9a-f-]{36}$/i
+
+/**
+ * Page d'erreur interne. Elle ne contient **aucun script** (CSP `script-src 'none'`) :
+ * toutes les données sont des chaînes échappées dans du texte ou des attributs `href`
+ * validés, et les actions passent par des liens `zuri://action/...` interceptés par le
+ * processus principal (voir `TabManager.handleInternalAction`).
+ */
+function errorPage(
+  url: string,
+  code: number,
+  description: string,
+  insecureToken: string,
+  settings: Settings
+): string {
   const fr = settings.language === 'fr'
-  const message = MESSAGES[code]?.[settings.language] ?? description ?? (fr ? 'Erreur inconnue' : 'Unknown error')
-  const target = /^zuri:\/\//.test(url) ? '' : url
-  const insecure = target.startsWith('https://') ? `http://${target.slice(8)}` : ''
+  const message =
+    MESSAGES[code]?.[settings.language] || description || (fr ? 'Erreur inconnue' : 'Unknown error')
+  const target = safeRetryTarget(url)
+  const retryInsecure = TOKEN_RE.test(insecureToken) && target.startsWith('https://')
 
   return `<!doctype html>
 <html lang="${settings.language}">
 <head>
 <meta charset="utf-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'unsafe-inline'" />
+<meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}" />
 <title>${fr ? 'Page inaccessible' : 'Page not available'}</title>
 <style>
   :root { color-scheme: light dark; }
@@ -110,40 +134,57 @@ function errorPage(url: string, code: number, description: string, settings: Set
     }</p>
     <div class="url">${escapeHtml(target || url)}</div>
     <div class="actions">
-      <button class="primary" onclick="location.href='${escapeHtml(target)}'">${
-        fr ? 'Réessayer' : 'Try again'
-      }</button>
-      ${insecure ? `<a class="btn ghost" href="zuri://retry-insecure/?url=${encodeURIComponent(insecure)}">${fr ? 'Continuer en HTTP' : 'Continue over HTTP'}</a>` : ''}
-      <a class="btn ghost" href="javascript:history.back()">${fr ? 'Retour' : 'Go back'}</a>
+      ${target ? `<a class="btn primary" href="${escapeHtml(target)}">${fr ? 'Réessayer' : 'Try again'}</a>` : ''}
+      ${
+        retryInsecure
+          ? `<a class="btn ghost" href="zuri://action/retry-insecure?t=${encodeURIComponent(insecureToken)}">${
+              fr ? 'Continuer en HTTP (non chiffré)' : 'Continue over HTTP (unencrypted)'
+            }</a>`
+          : ''
+      }
+      <a class="btn ghost" href="zuri://action/back">${fr ? 'Retour' : 'Go back'}</a>
     </div>
     <p class="muted" style="margin-top:22px;font-size:12px">${
-      fr ? `Code d’erreur ${code}` : `Error code ${code}`
+      fr ? `Code d’erreur ${Number.isFinite(code) ? code : 0}` : `Error code ${Number.isFinite(code) ? code : 0}`
     } · Zuri</p>
   </main>
 </body>
 </html>`
 }
 
-export function registerInternalProtocol(): void {
-  protocol.handle('zuri', async (request) => {
-    const parsed = new URL(request.url)
+const PAGE_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'none'; form-action 'none'; base-uri 'none'"
 
-    if (parsed.hostname === 'retry-insecure') {
-      const target = parsed.searchParams.get('url') ?? ''
-      if (/^http:\/\//i.test(target)) {
-        privacyShield.allowInsecureOnce(target)
-        return Response.redirect(target, 302)
-      }
-      return new Response('Requête invalide', { status: 400 })
-    }
+const PAGE_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  // `frame-ancestors` n'est valable qu'en en-tête : interdit d'intégrer la page dans un site.
+  'content-security-policy': `${PAGE_CSP}; frame-ancestors 'none'`,
+  'x-content-type-options': 'nosniff',
+  'cache-control': 'no-store'
+}
 
-    const settings = getSettings()
-    const url = parsed.searchParams.get('url') ?? ''
-    const code = Number(parsed.searchParams.get('code') ?? 0)
-    const description = parsed.searchParams.get('desc') ?? ''
+function handleZuriRequest(request: Request): Response {
+  let parsed: URL
+  try {
+    parsed = new URL(request.url)
+  } catch {
+    return new Response('Requête invalide', { status: 400 })
+  }
+  if (parsed.hostname !== 'error') return new Response('Introuvable', { status: 404 })
 
-    return new Response(errorPage(url, code, description, settings), {
-      headers: { 'content-type': 'text/html; charset=utf-8' }
-    })
+  const settings = getSettings()
+  const url = (parsed.searchParams.get('url') ?? '').slice(0, 8192)
+  const code = Number(parsed.searchParams.get('code') ?? 0)
+  const description = (parsed.searchParams.get('desc') ?? '').slice(0, 300)
+  const token = parsed.searchParams.get('t') ?? ''
+
+  return new Response(errorPage(url, code, description, token, settings), {
+    headers: PAGE_HEADERS
   })
+}
+
+/** Enregistre `zuri://` sur une session (à appeler pour chaque partition d'onglets). */
+export function registerInternalProtocol(ses: Session): void {
+  if (ses.protocol.isProtocolHandled('zuri')) return
+  ses.protocol.handle('zuri', handleZuriRequest)
 }

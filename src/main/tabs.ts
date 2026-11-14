@@ -12,11 +12,11 @@ import { randomUUID } from 'node:crypto'
 import type { BlockedInfo, DownloadItem, TabId, TabState, TabsSnapshot } from '@shared/types'
 import { chromeHeightFor } from '@shared/layout'
 import { addBookmark } from './bookmarks'
-import { recordVisit } from './history'
+import { recordVisit, updateTitle } from './history'
 import { privacyShield } from './privacy'
-import { resolveInput } from './search'
+import { isHttpUrl, resolveInput } from './search'
 import { getSettings } from './settings'
-import { getPrivateSession, MAIN_PARTITION, PRIVATE_PARTITION } from './sessions'
+import { clearPrivateSession, MAIN_PARTITION, PRIVATE_PARTITION } from './sessions'
 
 interface ZuriTab {
   id: TabId
@@ -35,6 +35,12 @@ interface ZuriTab {
   errorUrl: string | null
 }
 
+/** Durée de validité du lien « Continuer en HTTP » d'une page d'erreur. */
+const INSECURE_TOKEN_TTL_MS = 10 * 60 * 1000
+
+/** Origine d'une navigation : saisie dans l'interface ou source interne/web (liens, menus…). */
+export type NavigationSource = 'user' | 'internal'
+
 export interface TabManagerDeps {
   window: BrowserWindow
   emit: (snapshot: TabsSnapshot) => void
@@ -50,6 +56,7 @@ export class TabManager {
   private emitTimer: NodeJS.Timeout | null = null
   private readonly deps: TabManagerDeps
   private readonly wcToTab = new Map<number, TabId>()
+  private readonly insecureTokens = new Map<string, { tabId: TabId; url: string; expires: number }>()
 
   constructor(deps: TabManagerDeps) {
     this.deps = deps
@@ -86,7 +93,11 @@ export class TabManager {
     return tabId ? this.tabs.get(tabId) : undefined
   }
 
-  create(url?: string, isPrivate = false, options?: { background?: boolean }): ZuriTab {
+  create(
+    url?: string,
+    isPrivate = false,
+    options?: { background?: boolean; source?: NavigationSource }
+  ): ZuriTab {
     const settings = getSettings()
     const id = randomUUID()
     const view = new WebContentsView({
@@ -128,7 +139,7 @@ export class TabManager {
 
     this.wire(tab)
     if (url) {
-      void this.navigate(id, url)
+      void this.navigate(id, url, options?.source ?? 'internal')
     }
     if (!options?.background || !this.activeId) this.select(id)
     else this.scheduleEmit()
@@ -149,14 +160,26 @@ export class TabManager {
         event.preventDefault()
         return
       }
-      if (url.startsWith('zuri://')) return
+      if (/^zuri:/i.test(url)) {
+        // Une page web ne peut jamais ouvrir une page interne (usurpation, contournement
+        // HTTPS-only). Seules les pages zuri:// elles-mêmes déclenchent des actions.
+        event.preventDefault()
+        if (contents.getURL().startsWith('zuri://error')) this.handleInternalAction(tab, url)
+        return
+      }
       if (!/^(https?|mailto|tel|about|data):/i.test(url)) event.preventDefault()
+    })
+
+    // Une redirection serveur ne doit pas non plus mener vers une page interne ou locale.
+    contents.on('will-redirect', (event, url) => {
+      if (/^(zuri|file):/i.test(url)) event.preventDefault()
     })
 
     contents.on('page-title-updated', (_event, title) => {
       tab.title = title
       this.scheduleEmit()
-      if (/^https?:/i.test(contents.getURL())) recordVisit(contents.getURL(), title)
+      // Jamais de trace pour un onglet privé ; le titre ne compte pas comme une visite.
+      if (!tab.isPrivate && /^https?:/i.test(contents.getURL())) updateTitle(contents.getURL(), title)
     })
 
     contents.on('page-favicon-updated', (_event, favicons) => {
@@ -190,7 +213,8 @@ export class TabManager {
     contents.on('did-navigate', (_event, url) => {
       tab.url = url
       tab.favicon = null
-      if (/^https?:/i.test(url)) recordVisit(url, tab.title || url)
+      // Le titre de la nouvelle page n'est pas encore connu : page-title-updated le complétera.
+      if (!tab.isPrivate && /^https?:/i.test(url)) recordVisit(url, '')
       this.scheduleEmit()
     })
 
@@ -254,7 +278,54 @@ export class TabManager {
       desc: description,
       lang: getSettings().language
     })
+    // « Continuer en HTTP » n'est proposé qu'avec un jeton à usage unique lié à cet onglet :
+    // le lien ne peut donc pas être fabriqué par un site.
+    if (/^https:\/\//i.test(url)) {
+      this.pruneInsecureTokens()
+      const token = randomUUID()
+      this.insecureTokens.set(token, {
+        tabId: tab.id,
+        url: `http://${url.slice('https://'.length)}`,
+        expires: Date.now() + INSECURE_TOKEN_TTL_MS
+      })
+      params.set('t', token)
+    }
     void tab.view.webContents.loadURL(`zuri://error/?${params.toString()}`).catch(() => {})
+  }
+
+  private pruneInsecureTokens(): void {
+    const now = Date.now()
+    for (const [token, entry] of this.insecureTokens) {
+      if (entry.expires < now || !this.tabs.has(entry.tabId)) this.insecureTokens.delete(token)
+    }
+  }
+
+  /** Actions déclenchées depuis une page d'erreur (`zuri://action/...`). */
+  private handleInternalAction(tab: ZuriTab, raw: string): void {
+    let action: URL
+    try {
+      action = new URL(raw)
+    } catch {
+      return
+    }
+    if (action.hostname !== 'action') return
+    const contents = tab.view.webContents
+
+    if (action.pathname === '/back') {
+      if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
+      else void this.navigate(tab.id, '')
+      return
+    }
+
+    if (action.pathname === '/retry-insecure') {
+      const token = action.searchParams.get('t') ?? ''
+      const entry = this.insecureTokens.get(token)
+      this.insecureTokens.delete(token)
+      if (!entry || entry.tabId !== tab.id || entry.expires < Date.now()) return
+      privacyShield.allowInsecureOnce(entry.url)
+      tab.errorUrl = null
+      void contents.loadURL(entry.url).catch(() => {})
+    }
   }
 
   private openContextMenu(
@@ -388,6 +459,13 @@ export class TabManager {
     } catch {
       /* déjà détruite */
     }
+    // Dernier onglet privé fermé : la session privée est purgée, même si c'était
+    // le dernier onglet de la fenêtre (un onglet neuf est recréé juste après).
+    if (tab.isPrivate && ![...this.tabs.values()].some((other) => other.isPrivate)) {
+      void clearPrivateSession().catch((error) =>
+        console.error('[zuri] purge de la session privée impossible', error)
+      )
+    }
     if (this.activeId === id) {
       const nextId = order[index + 1] ?? order[index - 1] ?? null
       this.activeId = nextId && this.tabs.has(nextId) ? nextId : null
@@ -396,10 +474,6 @@ export class TabManager {
     if (!this.tabs.size) {
       this.create(undefined, false)
       return
-    }
-    if (!order.some((tabId) => this.tabs.get(tabId)?.isPrivate)) {
-      void getPrivateSession().clearStorageData()
-      privacyShield.clearCounters()
     }
     this.refreshVisibility()
     this.scheduleEmit()
@@ -417,12 +491,21 @@ export class TabManager {
     this.select(next)
   }
 
-  async navigate(id: TabId, input: string): Promise<void> {
+  /**
+   * Navigue dans un onglet.
+   * - `user` : saisie de l'omnibox ou action de l'interface → URL, recherche, ou `file:`.
+   * - `internal` : liens de pages, menus, restauration → seules les URL http(s) sont chargées.
+   *   `loadURL` ne déclenche pas `will-navigate` : ce filtre est donc indispensable.
+   */
+  async navigate(id: TabId, input: string, source: NavigationSource = 'internal'): Promise<void> {
     const tab = this.tabs.get(id)
     if (!tab) return
     const settings = getSettings()
     const trimmed = input.trim()
-    const target = trimmed ? resolveInput(trimmed, settings) : settings.homepage.trim()
+    let target: string
+    if (!trimmed) target = resolveInput(settings.homepage, settings)
+    else if (source === 'user') target = resolveInput(trimmed, settings, { allowFile: true })
+    else target = isHttpUrl(trimmed) ? trimmed : ''
     if (!target) {
       tab.isNewTab = true
       tab.url = ''

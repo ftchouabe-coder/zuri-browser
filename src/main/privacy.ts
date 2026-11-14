@@ -1,4 +1,4 @@
-import { app, dialog, net, session as electronSession, type Session, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, net, session as electronSession, type Session, type WebContents } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { FiltersEngine, Request, type RequestType } from '@ghostery/adblocker'
@@ -274,11 +274,6 @@ export class PrivacyShield {
       /* cosmétique best-effort */
     }
   }
-
-  /** Purge des compteurs (fin de session privée). */
-  clearCounters(): void {
-    this.blockedByWebContents.clear()
-  }
 }
 
 export const privacyShield = new PrivacyShield()
@@ -314,10 +309,18 @@ const PROMPTABLE = new Set([
   'midiSysex'
 ])
 
+/**
+ * Décisions mémorisées, clé `${portée}|${permission}|${origine}`.
+ * La portée (session normale / privée) empêche toute fuite d'une décision entre les deux.
+ * Pour `media`, la permission est déclinée par type : `media:audio`, `media:video`.
+ */
 const permissionDecisions = new Map<string, boolean>()
+const pendingPrompts = new Map<string, Promise<boolean>>()
 
 const PERMISSION_TEXT: Record<string, { fr: string; en: string }> = {
-  media: {
+  'media:audio': { fr: 'utiliser votre microphone', en: 'use your microphone' },
+  'media:video': { fr: 'utiliser votre caméra', en: 'use your camera' },
+  'media:audio+video': {
     fr: 'utiliser votre caméra et votre microphone',
     en: 'use your camera and microphone'
   },
@@ -334,32 +337,54 @@ const PERMISSION_TEXT: Record<string, { fr: string; en: string }> = {
   }
 }
 
-function originOf(url: string): string {
+/** Origine sérialisée ; `null` si l'URL n'a pas d'origine exploitable (opaque, invalide). */
+function originOf(url: string): string | null {
   try {
-    return new URL(url).origin
+    const origin = new URL(url).origin
+    return origin && origin !== 'null' ? origin : null
   } catch {
-    return url
+    return null
   }
 }
 
-async function promptPermission(origin: string, permission: string): Promise<boolean> {
+/** Types de média demandés, normalisés (`audio`, `video`). */
+function mediaKinds(types: readonly string[] | undefined): string[] {
+  const kinds = new Set<string>()
+  for (const type of types ?? []) if (type === 'audio' || type === 'video') kinds.add(type)
+  return [...kinds].sort()
+}
+
+async function promptPermission(
+  origin: string,
+  topOrigin: string | null,
+  textKey: string
+): Promise<boolean> {
   const language = getSettings().language
   const fr = language === 'fr'
-  const what = PERMISSION_TEXT[permission]?.[language] ?? permission
-  const { response } = await dialog.showMessageBox({
+  const what = PERMISSION_TEXT[textKey]?.[language] ?? textKey
+  const embedded = topOrigin && topOrigin !== origin
+  const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const options: Electron.MessageBoxOptions = {
     type: 'question',
     title: fr ? 'Autorisation demandée' : 'Permission requested',
-    message: fr
-      ? `Le site ${origin} souhaite ${what}.`
-      : `The site ${origin} wants to ${what}.`,
-    detail: fr
-      ? 'Vous pouvez changer d’avis à tout moment en rechargeant la page.'
-      : 'You can change your mind at any time by reloading the page.',
+    message: fr ? `Le site ${origin} souhaite ${what}.` : `The site ${origin} wants to ${what}.`,
+    detail:
+      (embedded
+        ? fr
+          ? `Cette demande provient d’un contenu intégré à ${topOrigin}.\n`
+          : `This request comes from content embedded in ${topOrigin}.\n`
+        : '') +
+      (fr
+        ? 'Votre choix est mémorisé jusqu’à l’effacement des cookies ou le redémarrage de Zuri.'
+        : 'Your choice is remembered until cookies are cleared or Zuri restarts.'),
     buttons: fr ? ['Autoriser', 'Bloquer'] : ['Allow', 'Block'],
     defaultId: 1,
     cancelId: 1,
     noLink: true
-  })
+  }
+  const { response } = parent
+    ? await dialog.showMessageBox(parent, options)
+    : await dialog.showMessageBox(options)
   return response === 0
 }
 
@@ -368,8 +393,11 @@ export function clearPermissionDecisions(): void {
   permissionDecisions.clear()
 }
 
-/** Session par défaut, avec un User-Agent cohérent (sans jeton Electron). */
-export function hardenSession(ses: Session): void {
+/**
+ * Durcit une session : User-Agent sans jeton Electron, permissions refusées par défaut
+ * et demandées explicitement, décisions cloisonnées par `scope`.
+ */
+export function hardenSession(ses: Session, scope: 'main' | 'private'): void {
   const ua = ses
     .getUserAgent()
     .replace(/\sZuri\/[\d.]+/i, '')
@@ -387,24 +415,65 @@ export function hardenSession(ses: Session): void {
       return
     }
     const origin = originOf(details.requestingUrl || contents.getURL())
-    const key = `${permission}|${origin}`
-    const known = permissionDecisions.get(key)
-    if (known !== undefined) {
-      callback(known)
+    // Les origines opaques (data:, about:, sandbox) n'obtiennent jamais de permission.
+    if (!origin) {
+      callback(false)
       return
     }
-    void promptPermission(origin, permission)
-      .then((granted) => {
-        permissionDecisions.set(key, granted)
-        callback(granted)
-      })
-      .catch(() => callback(false))
+
+    let names: string[] = [permission]
+    let textKey: string = permission
+    if (permission === 'media') {
+      const kinds = mediaKinds((details as Electron.MediaAccessPermissionRequest).mediaTypes)
+      if (!kinds.length) {
+        callback(false)
+        return
+      }
+      names = kinds.map((kind) => `media:${kind}`)
+      textKey = `media:${kinds.join('+')}`
+    }
+
+    const keys = names.map((name) => `${scope}|${name}|${origin}`)
+    const known = keys.map((key) => permissionDecisions.get(key))
+    if (known.some((value) => value === false)) {
+      callback(false)
+      return
+    }
+    if (known.every((value) => value === true)) {
+      callback(true)
+      return
+    }
+
+    // Une seule boîte de dialogue par demande identique, même si la page insiste.
+    const pendingKey = keys.join(',')
+    let pending = pendingPrompts.get(pendingKey)
+    if (!pending) {
+      pending = promptPermission(origin, originOf(contents.getURL()), textKey)
+        .then((granted) => {
+          for (const key of keys) permissionDecisions.set(key, granted)
+          return granted
+        })
+        .catch(() => false)
+        .finally(() => pendingPrompts.delete(pendingKey))
+      pendingPrompts.set(pendingKey, pending)
+    }
+    void pending.then(callback)
   })
 
-  ses.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+  ses.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) => {
     if (ALWAYS_ALLOWED.has(permission)) return true
     if (!PROMPTABLE.has(permission)) return false
-    return permissionDecisions.get(`${permission}|${originOf(requestingOrigin)}`) ?? true
+    const origin = originOf(requestingOrigin)
+    if (!origin) return false
+    const name =
+      permission === 'media'
+        ? details.mediaType === 'audio' || details.mediaType === 'video'
+          ? `media:${details.mediaType}`
+          : null
+        : permission
+    if (!name) return false
+    // Refus par défaut : seule une autorisation explicite et mémorisée ouvre l'accès.
+    return permissionDecisions.get(`${scope}|${name}|${origin}`) === true
   })
 }
 
