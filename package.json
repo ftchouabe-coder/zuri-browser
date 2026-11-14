@@ -1,6 +1,6 @@
 {
   "name": "zuri-browser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Zuri — navigateur web privé aux couleurs africaines",
   "homepage": "https://github.com/ftchouabe-coder/zuri-browser",
   "repository": {
@@ -26,7 +26,7 @@
     "smoke": "npm run build && electron scripts/smoke.cjs",
     "icon": "pwsh -NoProfile -File scripts/make-icon.ps1",
     "pack": "electron-vite build && electron-builder --win --dir --publish never",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win --publish never"
   },
   "dependencies": {
     "@ghostery/adblocker": "^2.20.3",
