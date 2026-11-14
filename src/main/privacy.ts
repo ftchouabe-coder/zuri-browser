@@ -27,16 +27,81 @@ import { getSettings } from './settings'
  * (au lieu de `enableBlockingInSession`, qui écraserait ceux de Zuri).
  */
 
-const AD_LISTS = [
-  'https://easylist.to/easylist/easylist.txt',
-  'https://easylist.to/easylist/easyprivacy.txt',
-  'https://secure.fanboy.co.nz/fanboy-cookiemonster.txt',
-  'https://easylist.to/easylist/fanboy-annoyance.txt'
+/** Chaque liste est une suite d'adresses équivalentes (source, puis miroirs). */
+type ListSource = readonly string[]
+
+const AD_LISTS: ListSource[] = [
+  ['https://easylist.to/easylist/easylist.txt'],
+  ['https://easylist.to/easylist/easyprivacy.txt'],
+  ['https://secure.fanboy.co.nz/fanboy-cookiemonster.txt'],
+  ['https://easylist.to/easylist/fanboy-annoyance.txt']
 ]
 
-/** Listes de sécurité (téléchargées à l'exécution, non redistribuées). */
-const PHISHING_LISTS = ['https://malware-filter.gitlab.io/malware-filter/phishing-filter.txt']
-const MALWARE_LISTS = ['https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-online.txt']
+/** Listes de sécurité (téléchargées à l'exécution, non redistribuées), avec miroir officiel. */
+const PHISHING_LISTS: ListSource[] = [
+  [
+    'https://malware-filter.gitlab.io/malware-filter/phishing-filter.txt',
+    'https://malware-filter.pages.dev/phishing-filter.txt'
+  ]
+]
+const MALWARE_LISTS: ListSource[] = [
+  [
+    'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-online.txt',
+    'https://malware-filter.pages.dev/urlhaus-filter-online.txt'
+  ]
+]
+
+/**
+ * Téléchargement adapté aux connexions lentes : on n’abandonne que si *rien* n’arrive
+ * pendant `IDLE_TIMEOUT_MS`, avec un plafond global. Un délai global court (30 s) rendait
+ * la protection inopérante sous ~50 Ko/s, alors que ces listes pèsent plusieurs Mo.
+ */
+const IDLE_TIMEOUT_MS = 60_000
+const TOTAL_TIMEOUT_MS = 10 * 60 * 1000
+const MAX_LIST_BYTES = 64 * 1024 * 1024
+const RETRY_AFTER_FAILURE_MS = 10 * 60 * 1000
+
+async function downloadText(url: string): Promise<string> {
+  const controller = new AbortController()
+  let idle: NodeJS.Timeout | undefined
+  const arm = (): void => {
+    clearTimeout(idle)
+    idle = setTimeout(() => controller.abort(new Error('inactivité')), IDLE_TIMEOUT_MS)
+  }
+  const total = setTimeout(() => controller.abort(new Error('délai global')), TOTAL_TIMEOUT_MS)
+  try {
+    arm()
+    const response = await net.fetch(url, { signal: controller.signal })
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      arm()
+      size += value.byteLength
+      if (size > MAX_LIST_BYTES) throw new Error('liste trop volumineuse')
+      chunks.push(value)
+    }
+    return Buffer.concat(chunks).toString('utf8')
+  } finally {
+    clearTimeout(idle)
+    clearTimeout(total)
+  }
+}
+
+/** Essaie la source puis ses miroirs ; `null` si aucune adresse n'a répondu. */
+async function downloadList(source: ListSource): Promise<string | null> {
+  for (const url of source) {
+    try {
+      return await downloadText(url)
+    } catch (error) {
+      console.warn(`[privacy] ${url} indisponible :`, error instanceof Error ? error.message : error)
+    }
+  }
+  return null
+}
 
 const DAY = 24 * 60 * 60 * 1000
 const REFRESH_TICK_MS = 3 * 60 * 60 * 1000
@@ -89,11 +154,12 @@ class FilterSet<E extends FiltersEngine> {
   engine: E | null = null
   loadedAt = 0
   private refreshing = false
+  private retryTimer: NodeJS.Timeout | null = null
 
   constructor(
     private readonly label: string,
     private readonly file: string,
-    private readonly lists: string[],
+    private readonly lists: ListSource[],
     private readonly maxAgeMs: number,
     private readonly build: (text: string) => E,
     private readonly load: (buffer: Uint8Array) => E,
@@ -126,15 +192,9 @@ class FilterSet<E extends FiltersEngine> {
     if (this.refreshing) return
     this.refreshing = true
     try {
-      const remote: string[] = []
-      for (const url of this.lists) {
-        try {
-          const response = await net.fetch(url, { signal: AbortSignal.timeout(30_000) })
-          if (response.ok) remote.push(await response.text())
-        } catch {
-          /* liste indisponible : on continue avec les autres */
-        }
-      }
+      const remote = (await Promise.all(this.lists.map(downloadList))).filter(
+        (text): text is string => text !== null
+      )
       // Aucune liste distante et un moteur existe : on le garde plutôt qu'un moteur appauvri.
       if (!remote.length && this.engine) return
       const local = this.fallback()
@@ -142,8 +202,14 @@ class FilterSet<E extends FiltersEngine> {
       if (!texts.length) return
       const engine = this.build(texts.join('\n'))
       this.engine = engine
-      this.loadedAt = Date.now()
-      writeFileSync(this.file, engine.serialize())
+      if (remote.length) {
+        this.loadedAt = Date.now()
+        writeFileSync(this.file, engine.serialize())
+      } else {
+        // Moteur de secours (liste embarquée seule) : utilisable tout de suite, mais ni mis
+        // en cache ni considéré comme à jour, pour retenter le réseau rapidement.
+        this.loadedAt = 0
+      }
       const { networkFilters, cosmeticFilters } = engine.getFilters()
       console.info(
         `[privacy] ${this.label} : ${networkFilters.length} règles réseau, ${cosmeticFilters.length} cosmétiques`
@@ -152,7 +218,18 @@ class FilterSet<E extends FiltersEngine> {
       console.warn(`[privacy] mise à jour ${this.label} impossible`, error)
     } finally {
       this.refreshing = false
+      this.scheduleRetryIfIncomplete()
     }
+  }
+
+  /** Sans moteur à jour (réseau absent ou trop lent), nouvel essai dans 10 minutes. */
+  private scheduleRetryIfIncomplete(): void {
+    if (!this.stale || this.retryTimer) return
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.refreshIfStale()
+    }, RETRY_AFTER_FAILURE_MS)
+    this.retryTimer.unref?.()
   }
 }
 
