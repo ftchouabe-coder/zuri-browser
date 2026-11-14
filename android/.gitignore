@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+*.apk
+*.aab
+# Clé de signature et mots de passe : jamais dans le dépôt.
+keystore/
+keystore.properties

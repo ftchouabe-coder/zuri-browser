@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WebView suit ce réglage : le HTTP en clair doit rester possible pour que l'utilisateur
+     puisse « continuer en HTTP » après l'avertissement HTTPS-only. Le trafic propre à
+     l'application (listes de filtres) n'utilise que HTTPS, imposé dans le code. Seules les
+     autorités du système sont acceptées (aucune AC ajoutée par l'utilisateur). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
