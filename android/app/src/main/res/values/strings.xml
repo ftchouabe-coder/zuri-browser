@@ -120,4 +120,8 @@
     <string name="savings_price_help">En %1$s, selon votre forfait. Sert uniquement à estimer vos économies, sur l’appareil. Laissez vide pour ne pas afficher de montant.</string>
     <string name="set_cookie_refuse">Refuser automatiquement les bandeaux de cookies</string>
     <string name="set_hide_slots">Masquer les emplacements publicitaires vides</string>
+    <string name="lookalike_heading">Ce site imite peut-être %1$s</string>
+    <string name="lookalike_message">%1$s n’appartient pas à %2$s. Ce genre de faux site sert à voler les codes PIN, mots de passe et numéros de compte : ne saisissez rien ici.</string>
+    <string name="lookalike_detail">Vérification faite sur votre appareil. Sites officiels : %1$s</string>
+    <string name="lookalike_proceed">Je connais ce site, continuer</string>
 </resources>

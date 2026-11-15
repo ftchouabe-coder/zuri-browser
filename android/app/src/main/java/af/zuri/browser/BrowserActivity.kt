@@ -487,6 +487,14 @@ class BrowserActivity : Activity() {
                 }
             }
         }
+        // Faux site de mobile money ou de banque (nom d'hôte imitant une marque).
+        if (config.safeBrowsing && request.isForMainFrame) {
+            val match = Lookalike.check(host)
+            val until = tab.unsafeHosts[host]
+            if (match != null && (until == null || until < SystemClock.elapsedRealtime())) {
+                return lookalikeResponse(tab, url, match)
+            }
+        }
         if (config.adblock && !request.isForMainFrame && filters.ads.matches(host, url)) {
             val pageHost = UrlInput.hostOf(tab.pageUrl)
             if (pageHost == null || DomainSet.siteOf(pageHost) != DomainSet.siteOf(host)) {
@@ -496,6 +504,31 @@ class BrowserActivity : Activity() {
             }
         }
         return null
+    }
+
+    private fun lookalikeResponse(tab: Tab, url: String, match: Lookalike.Match): WebResourceResponse {
+        val heading = getString(R.string.lookalike_heading, match.brand.name)
+        val html = Pages.message(
+            getString(R.string.lang), heading, heading,
+            getString(R.string.lookalike_message, match.host, match.brand.name),
+            getString(R.string.lookalike_detail, match.brand.example),
+            listOf(
+                Pages.Action(getString(R.string.threat_back), actions.href(tab.id, url, InternalActions.Kind.BACK), primary = true),
+                Pages.Action(getString(R.string.lookalike_proceed), actions.href(tab.id, url, InternalActions.Kind.PROCEED_UNSAFE))
+            ),
+            Pages.Tone.WARNING
+        )
+        return htmlResponse(html)
+    }
+
+    private fun htmlResponse(html: String): WebResourceResponse {
+        val headers = mapOf(
+            "Content-Security-Policy" to Pages.CSP,
+            "Cache-Control" to "no-store",
+            "Referrer-Policy" to "no-referrer",
+            "X-Content-Type-Options" to "nosniff"
+        )
+        return WebResourceResponse("text/html", "utf-8", 200, "OK", headers, ByteArrayInputStream(html.toByteArray()))
     }
 
     private fun emptyResponse() = WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))

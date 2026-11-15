@@ -119,4 +119,8 @@
     <string name="savings_price_help">In %1$s, from your plan. Only used to estimate your savings, on the device. Leave empty to hide amounts.</string>
     <string name="set_cookie_refuse">Automatically refuse cookie banners</string>
     <string name="set_hide_slots">Hide empty ad slots</string>
+    <string name="lookalike_heading">This site may be imitating %1$s</string>
+    <string name="lookalike_message">%1$s does not belong to %2$s. Fake sites like this are used to steal PIN codes, passwords and account numbers: do not enter anything here.</string>
+    <string name="lookalike_detail">Checked on your device. Official sites: %1$s</string>
+    <string name="lookalike_proceed">I know this site, continue</string>
 </resources>
