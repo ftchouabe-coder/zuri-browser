@@ -113,7 +113,7 @@
     <string name="bookmark_removed">Retiré des favoris</string>
     <string name="delete">Supprimer</string>
     <string name="savings_line">Ce mois-ci : %1$s éléments bloqués, environ %2$s de données économisées%3$s.</string>
-    <string name="savings_cost"> (≈ %1$s)</string>
+    <string name="savings_cost">" (≈ %1$s)"</string>
     <string name="savings_price_button">Prix des données</string>
     <string name="savings_price_title">Prix d’1 Go de données</string>
     <string name="savings_price_hint">Exemple : 1000</string>
@@ -167,4 +167,8 @@
     <string name="update_message">Une nouvelle version a été publiée sur la page officielle du projet. Téléchargez l’APK depuis cette page : Android n’installera la mise à jour que si elle est signée par la même clé que votre version actuelle.</string>
     <string name="update_open">Ouvrir la page</string>
     <string name="update_later">Plus tard</string>
+    <string name="menu_language">Langue · Language</string>
+    <string name="language_title">Langue de l’interface</string>
+    <string name="language_system">Langue du téléphone</string>
+    <string name="language_restart">Zuri va redémarrer pour changer de langue. Les onglets privés seront fermés.</string>
 </resources>

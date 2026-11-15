@@ -7,6 +7,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -120,6 +121,17 @@ class BrowserActivity : Activity() {
     private val privateSupported by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }
 
     // ---------------------------------------------------------------- cycle de vie
+
+    /** Langue choisie dans Zuri (sinon celle du téléphone) : fonctionne aussi avant Android 13. */
+    override fun attachBaseContext(newBase: Context) {
+        val tag = newBase.getSharedPreferences("zuri", MODE_PRIVATE).getString(LANGUAGE_KEY, "").orEmpty()
+        if (tag.isEmpty()) {
+            super.attachBaseContext(newBase)
+            return
+        }
+        val config = Configuration(newBase.resources.configuration).apply { setLocale(Locale.forLanguageTag(tag)) }
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -872,6 +884,7 @@ class BrowserActivity : Activity() {
         menu.add(0, M_HISTORY, 6, R.string.menu_history)
         menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
         menu.add(0, M_SETTINGS, 8, R.string.menu_settings)
+        menu.add(0, M_LANGUAGE, 9, R.string.menu_language)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 M_NEW -> newTab(private = false)
@@ -902,6 +915,7 @@ class BrowserActivity : Activity() {
                 M_HISTORY -> showHistory()
                 M_CLEAR -> confirmClearData()
                 M_SETTINGS -> showSettings()
+                M_LANGUAGE -> chooseLanguage()
             }
             true
         }
@@ -1281,6 +1295,37 @@ class BrowserActivity : Activity() {
                 startActivityForResult(intent, REQUEST_UNLOCK)
             }
         }
+    }
+
+    // ---------------------------------------------------------------- langue
+
+    private fun chooseLanguage() {
+        val prefs = getSharedPreferences("zuri", MODE_PRIVATE)
+        val current = prefs.getString(LANGUAGE_KEY, "").orEmpty()
+        val codes = listOf("", "fr", "en", "pt", "sw")
+        // Chaque langue est écrite dans sa propre langue, pour être reconnue même par erreur de choix.
+        val labels = arrayOf(getString(R.string.language_system), "Français", "English", "Português", "Kiswahili")
+        AlertDialog.Builder(this)
+            .setTitle(R.string.language_title)
+            .setSingleChoiceItems(labels, codes.indexOf(current).coerceAtLeast(0)) { dialog, which ->
+                dialog.dismiss()
+                val chosen = codes[which]
+                if (chosen == current) return@setSingleChoiceItems
+                val apply = {
+                    prefs.edit().putString(LANGUAGE_KEY, chosen).commit()
+                    recreate()
+                }
+                if (tabs.any { it.isPrivate }) {
+                    AlertDialog.Builder(this)
+                        .setMessage(R.string.language_restart)
+                        .setPositiveButton(R.string.ok) { _, _ -> apply() }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                } else {
+                    apply()
+                }
+            }
+            .show()
     }
 
     // ---------------------------------------------------------------- nouvelles versions
@@ -1789,6 +1834,7 @@ class BrowserActivity : Activity() {
     companion object {
         const val ACTION_SEARCH = "af.zuri.browser.SEARCH"
         const val ACTION_NEW_PRIVATE_TAB = "af.zuri.browser.NEW_PRIVATE_TAB"
+        private const val LANGUAGE_KEY = "uiLanguage"
 
         @Volatile private var filterLists: FilterLists? = null
 
@@ -1837,5 +1883,6 @@ class BrowserActivity : Activity() {
         const val M_OFFLINE_SAVE = 18
         const val M_OFFLINE_LIST = 19
         const val M_IMAGES = 20
+        const val M_LANGUAGE = 21
     }
 }

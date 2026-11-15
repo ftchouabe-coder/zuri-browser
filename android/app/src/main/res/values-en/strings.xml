@@ -112,7 +112,7 @@
     <string name="bookmark_removed">Bookmark removed</string>
     <string name="delete">Delete</string>
     <string name="savings_line">This month: %1$s items blocked, about %2$s of data saved%3$s.</string>
-    <string name="savings_cost"> (≈ %1$s)</string>
+    <string name="savings_cost">" (≈ %1$s)"</string>
     <string name="savings_price_button">Data price</string>
     <string name="savings_price_title">Price of 1 GB of data</string>
     <string name="savings_price_hint">Example: 1000</string>
@@ -166,4 +166,8 @@
     <string name="update_message">A new version was published on the project’s official page. Download the APK from that page: Android only installs the update if it is signed with the same key as your current version.</string>
     <string name="update_open">Open page</string>
     <string name="update_later">Later</string>
+    <string name="menu_language">Language · Langue</string>
+    <string name="language_title">Interface language</string>
+    <string name="language_system">Phone language</string>
+    <string name="language_restart">Zuri will restart to change language. Private tabs will be closed.</string>
 </resources>
