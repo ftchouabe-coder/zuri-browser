@@ -69,6 +69,7 @@ import androidx.webkit.ProfileStore
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.ByteArrayInputStream
@@ -260,6 +261,17 @@ class BrowserActivity : Activity() {
     @Deprecated("startActivityForResult suffit ici : pas de dépendance à androidx.activity")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_BACKUP) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) writeBackup(uri)
+            else pendingBackupPassword?.fill('\u0000').also { pendingBackupPassword = null }
+            return
+        }
+        if (requestCode == REQUEST_RESTORE) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) readRestore(uri)
+            return
+        }
         if (requestCode == REQUEST_DEFAULT) {
             if (isDefaultBrowser()) toast(R.string.default_browser_done)
             return
@@ -889,6 +901,8 @@ class BrowserActivity : Activity() {
         libraryMenu.add(0, M_BOOKMARKS, 0, R.string.menu_bookmarks)
         libraryMenu.add(0, M_HISTORY, 1, R.string.menu_history)
         libraryMenu.add(0, M_OFFLINE_LIST, 2, R.string.menu_offline_list)
+        libraryMenu.add(0, M_BACKUP, 3, R.string.menu_backup)
+        libraryMenu.add(0, M_RESTORE, 4, R.string.menu_restore)
 
         if (tabs.any { it.isPrivate }) menu.add(0, M_CLOSE_PRIVATE, 8, R.string.menu_close_private)
         menu.add(0, M_CLEAR, 9, R.string.menu_clear_data)
@@ -927,6 +941,8 @@ class BrowserActivity : Activity() {
                 M_SETTINGS -> showSettings()
                 M_LANGUAGE -> chooseLanguage()
                 M_DEFAULT -> askDefaultBrowser()
+                M_BACKUP -> startBackup()
+                M_RESTORE -> startRestore()
             }
             true
         }
@@ -1310,6 +1326,153 @@ class BrowserActivity : Activity() {
                 startActivityForResult(intent, REQUEST_UNLOCK)
             }
         }
+    }
+
+    // ---------------------------------------------------------------- sauvegarde chiffrée
+
+    private var pendingBackupPassword: CharArray? = null
+    private val backupExecutor by lazy { java.util.concurrent.Executors.newSingleThreadExecutor() }
+
+    /** Mot de passe de sauvegarde (8 caractères au moins), saisi deux fois à la création. */
+    private fun askPassword(titleRes: Int, confirm: Boolean, then: (CharArray) -> Unit) {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        fun field(hintRes: Int) = EditText(this).apply {
+            hint = getString(hintRes)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        }
+        val first = field(R.string.backup_password)
+        val second = field(R.string.backup_password_again)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, 0, pad, 0)
+            addView(first)
+            if (confirm) addView(second)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setMessage(if (confirm) R.string.backup_password_help else R.string.restore_password_help)
+            .setView(form)
+            .setPositiveButton(R.string.ok) { _, _ ->
+                val password = first.text.toString()
+                when {
+                    password.length < 8 -> {
+                        toast(R.string.backup_password_short)
+                        askPassword(titleRes, confirm, then)
+                    }
+                    confirm && password != second.text.toString() -> {
+                        toast(R.string.backup_password_mismatch)
+                        askPassword(titleRes, confirm, then)
+                    }
+                    else -> then(password.toCharArray())
+                }
+                first.text.clear()
+                second.text.clear()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun startBackup() {
+        askPassword(R.string.backup_title, confirm = true) { password ->
+            pendingBackupPassword = password
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/octet-stream")
+                .putExtra(Intent.EXTRA_TITLE, "zuri-sauvegarde-${java.time.LocalDate.now()}.zuri")
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQUEST_BACKUP)
+            } catch (_: ActivityNotFoundException) {
+                password.fill('\u0000')
+                pendingBackupPassword = null
+                toast(R.string.backup_failed)
+            }
+        }
+    }
+
+    private fun writeBackup(uri: Uri) {
+        val password = pendingBackupPassword ?: return
+        pendingBackupPassword = null
+        toast(R.string.backup_working)
+        val json = backupJson().toString().toByteArray()
+        backupExecutor.execute {
+            val ok = runCatching {
+                val sealed = BackupCrypto.seal(json, password)
+                contentResolver.openOutputStream(uri, "wt")!!.use { it.write(sealed) }
+            }.isSuccess
+            password.fill('\u0000')
+            runOnUiThread { toast(if (ok) R.string.backup_done else R.string.backup_failed) }
+        }
+    }
+
+    private fun backupJson(): JSONObject {
+        val history = JSONArray().apply { library.history().forEach { put(JSONObject().put("u", it.url).put("t", it.title).put("d", it.time)) } }
+        val bookmarks = JSONArray().apply { library.bookmarks().forEach { put(JSONObject().put("u", it.url).put("t", it.title).put("d", it.time)) } }
+        val offline = JSONArray().apply { shelf.list().forEach { put(OfflineStore.encode(it)) } }
+        return JSONObject()
+            .put("format", "zuri-sauvegarde").put("v", 1).put("created", System.currentTimeMillis())
+            .put("bookmarks", bookmarks).put("history", history).put("offline", offline)
+            .put("settings", settings.toJson())
+    }
+
+    private fun startRestore() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, REQUEST_RESTORE)
+        } catch (_: ActivityNotFoundException) {
+            toast(R.string.restore_failed)
+        }
+    }
+
+    private fun readRestore(uri: Uri) {
+        backupExecutor.execute {
+            val bytes = runCatching {
+                contentResolver.openInputStream(uri)!!.use { input ->
+                    val out = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        out.write(buffer, 0, read)
+                        if (out.size() > MAX_BACKUP_BYTES) throw java.io.IOException("fichier trop volumineux")
+                    }
+                    out.toByteArray()
+                }
+            }.getOrNull()
+            runOnUiThread {
+                if (bytes == null) toast(R.string.restore_failed)
+                else askPassword(R.string.restore_title, confirm = false) { password -> decryptRestore(bytes, password) }
+            }
+        }
+    }
+
+    private fun decryptRestore(bytes: ByteArray, password: CharArray) {
+        toast(R.string.backup_working)
+        backupExecutor.execute {
+            val result = runCatching { JSONObject(String(BackupCrypto.open(bytes, password), Charsets.UTF_8)) }
+            password.fill('\u0000')
+            runOnUiThread {
+                val json = result.getOrNull()
+                when {
+                    result.exceptionOrNull() is BackupCrypto.WrongPassword -> toast(R.string.restore_wrong_password)
+                    json == null || json.optString("format") != "zuri-sauvegarde" -> toast(R.string.restore_failed)
+                    else -> applyRestore(json)
+                }
+            }
+        }
+    }
+
+    private fun applyRestore(json: JSONObject) {
+        fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }
+        val history = json.optJSONArray("history").objects().map { Visit(it.optString("u"), it.optString("t"), it.optLong("d")) }
+        val bookmarks = json.optJSONArray("bookmarks").objects().map { Bookmark(it.optString("u"), it.optString("t"), it.optLong("d")) }
+        library.merge(history, bookmarks)
+        val articles = json.optJSONArray("offline").objects().mapNotNull(OfflineStore::decode)
+        articles.sortedBy { it.savedAt }.forEach(shelf::save)
+        json.optJSONObject("settings")?.let { updateSettings(settingsFromJson(it, settings)) }
+        Toast.makeText(this, getString(R.string.restore_done, bookmarks.size, history.size, articles.size), Toast.LENGTH_LONG).show()
     }
 
     // ---------------------------------------------------------------- navigateur par défaut
@@ -1906,6 +2069,8 @@ class BrowserActivity : Activity() {
         const val REQUEST_PERMISSIONS = 2
         const val REQUEST_UNLOCK = 3
         const val REQUEST_DEFAULT = 4
+        const val REQUEST_BACKUP = 5
+        const val REQUEST_RESTORE = 6
         const val UNSAFE_ALLOW_MS = 10 * 60 * 1000L
         const val REQUEST_FILE = 1
         const val LOOP_WINDOW_MS = 15_000L
@@ -1933,5 +2098,8 @@ class BrowserActivity : Activity() {
         const val M_PAGE_GROUP = 22
         const val M_LIBRARY_GROUP = 23
         const val M_DEFAULT = 24
+        const val M_BACKUP = 25
+        const val M_RESTORE = 26
+        const val MAX_BACKUP_BYTES = 64 * 1024 * 1024
     }
 }

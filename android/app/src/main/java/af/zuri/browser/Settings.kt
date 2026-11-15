@@ -1,6 +1,7 @@
 package af.zuri.browser
 
 import android.content.Context
+import org.json.JSONObject
 
 /** Réglages, avec des valeurs par défaut protectrices. */
 data class Settings(
@@ -81,3 +82,28 @@ class Prefs(context: Context) {
         prefs.edit().remove("session").remove("sessionIndex").apply()
     }
 }
+
+/** Réglages pour la sauvegarde (la langue et la session ne sont pas incluses). */
+fun Settings.toJson(): JSONObject = JSONObject()
+    .put("searchEngine", searchEngine.id).put("adblock", adblock).put("safeBrowsing", safeBrowsing)
+    .put("httpsOnly", httpsOnly).put("blockThirdPartyCookies", blockThirdPartyCookies).put("dataSaver", dataSaver)
+    .put("autoplay", autoplay).put("restoreSession", restoreSession).put("refuseCookies", refuseCookies)
+    .put("hideAdSlots", hideAdSlots).put("darkenSites", darkenSites).put("lockPrivate", lockPrivate)
+    .put("checkUpdates", checkUpdates).put("dataPricePerGb", dataPricePerGb)
+
+fun settingsFromJson(json: JSONObject, base: Settings) = base.copy(
+    searchEngine = SearchEngine.byId(json.optString("searchEngine", base.searchEngine.id)),
+    adblock = json.optBoolean("adblock", base.adblock),
+    safeBrowsing = json.optBoolean("safeBrowsing", base.safeBrowsing),
+    httpsOnly = json.optBoolean("httpsOnly", base.httpsOnly),
+    blockThirdPartyCookies = json.optBoolean("blockThirdPartyCookies", base.blockThirdPartyCookies),
+    dataSaver = json.optBoolean("dataSaver", base.dataSaver),
+    autoplay = json.optBoolean("autoplay", base.autoplay),
+    restoreSession = json.optBoolean("restoreSession", base.restoreSession),
+    refuseCookies = json.optBoolean("refuseCookies", base.refuseCookies),
+    hideAdSlots = json.optBoolean("hideAdSlots", base.hideAdSlots),
+    darkenSites = json.optBoolean("darkenSites", base.darkenSites),
+    lockPrivate = json.optBoolean("lockPrivate", base.lockPrivate),
+    checkUpdates = json.optBoolean("checkUpdates", base.checkUpdates),
+    dataPricePerGb = json.optInt("dataPricePerGb", base.dataPricePerGb).coerceIn(0, 1_000_000)
+)

@@ -76,6 +76,23 @@ class Library(private val maxHistory: Int = 2000) {
     @Synchronized
     fun bookmarks(): List<Bookmark> = ArrayList(marks)
 
+    /** Ajoute le contenu d'une sauvegarde sans rien supprimer ; à URL égale, la visite la plus récente gagne. */
+    @Synchronized
+    fun merge(history: List<Visit>, bookmarks: List<Bookmark>) {
+        val byUrl = LinkedHashMap<String, Visit>()
+        for (visit in visits + history) {
+            if (!UrlInput.isHttp(visit.url)) continue
+            val known = byUrl[visit.url]
+            if (known == null || visit.time > known.time) byUrl[visit.url] = visit
+        }
+        visits.clear()
+        visits.addAll(byUrl.values.sortedByDescending { it.time }.take(maxHistory))
+        for (mark in bookmarks) {
+            if (UrlInput.isHttp(mark.url) && marks.none { it.url == mark.url }) marks.add(mark)
+        }
+        changed()
+    }
+
     /** Remplace le contenu (chargement depuis le disque) sans déclencher de sauvegarde. */
     @Synchronized
     fun restore(history: List<Visit>, bookmarks: List<Bookmark>) {

@@ -175,4 +175,20 @@
     <string name="menu_default_browser">Set as default browser</string>
     <string name="default_browser_done">Zuri will now open links.</string>
     <string name="default_browser_manual">Choose Zuri in Settings › Apps › Default apps.</string>
+    <string name="menu_backup">Back up (encrypted file)</string>
+    <string name="menu_restore">Restore a backup</string>
+    <string name="backup_title">Encrypted backup</string>
+    <string name="restore_title">Restore a backup</string>
+    <string name="backup_password">Password</string>
+    <string name="backup_password_again">Same password again</string>
+    <string name="backup_password_help">Bookmarks, history, offline articles and settings, encrypted with this password. Write it down: without it the backup cannot be read. Nothing is sent online.</string>
+    <string name="restore_password_help">The password chosen when backing up. Data is added to yours; nothing is deleted.</string>
+    <string name="backup_password_short">At least 8 characters.</string>
+    <string name="backup_password_mismatch">The passwords do not match.</string>
+    <string name="backup_working">Encrypting…</string>
+    <string name="backup_done">Backup saved.</string>
+    <string name="backup_failed">Backup failed.</string>
+    <string name="restore_failed">This file is not a readable Zuri backup.</string>
+    <string name="restore_wrong_password">Wrong password, or the file was modified.</string>
+    <string name="restore_done">Restored: %1$d bookmarks, %2$d history pages, %3$d articles.</string>
 </resources>

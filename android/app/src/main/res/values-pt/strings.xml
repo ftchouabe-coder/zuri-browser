@@ -165,4 +165,20 @@
     <string name="menu_default_browser">Definir como navegador predefinido</string>
     <string name="default_browser_done">O Zuri passa a abrir as ligações.</string>
     <string name="default_browser_manual">Escolha o Zuri em Definições › Aplicações › Aplicações predefinidas.</string>
+    <string name="menu_backup">Fazer cópia de segurança (ficheiro cifrado)</string>
+    <string name="menu_restore">Restaurar uma cópia</string>
+    <string name="backup_title">Cópia de segurança cifrada</string>
+    <string name="restore_title">Restaurar uma cópia</string>
+    <string name="backup_password">Palavra-passe</string>
+    <string name="backup_password_again">A mesma palavra-passe</string>
+    <string name="backup_password_help">Favoritos, histórico, artigos offline e definições, cifrados com esta palavra-passe. Anote-a: sem ela, a cópia é ilegível. Nada é enviado online.</string>
+    <string name="restore_password_help">A palavra-passe escolhida na cópia. Os dados são adicionados aos seus; nada é apagado.</string>
+    <string name="backup_password_short">Pelo menos 8 caracteres.</string>
+    <string name="backup_password_mismatch">As palavras-passe são diferentes.</string>
+    <string name="backup_working">A cifrar…</string>
+    <string name="backup_done">Cópia guardada.</string>
+    <string name="backup_failed">Não foi possível fazer a cópia.</string>
+    <string name="restore_failed">Este ficheiro não é uma cópia do Zuri legível.</string>
+    <string name="restore_wrong_password">Palavra-passe incorreta, ou ficheiro alterado.</string>
+    <string name="restore_done">Restaurado: %1$d favoritos, %2$d páginas de histórico, %3$d artigos.</string>
 </resources>

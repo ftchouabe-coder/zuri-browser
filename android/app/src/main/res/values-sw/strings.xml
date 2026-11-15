@@ -165,4 +165,20 @@
     <string name="menu_default_browser">Weka kama kivinjari chaguomsingi</string>
     <string name="default_browser_done">Zuri sasa itafungua viungo.</string>
     <string name="default_browser_manual">Chagua Zuri katika Mipangilio › Programu › Programu chaguomsingi.</string>
+    <string name="menu_backup">Hifadhi nakala (faili iliyosimbwa)</string>
+    <string name="menu_restore">Rejesha nakala</string>
+    <string name="backup_title">Nakala iliyosimbwa</string>
+    <string name="restore_title">Rejesha nakala</string>
+    <string name="backup_password">Nenosiri</string>
+    <string name="backup_password_again">Nenosiri lilelile tena</string>
+    <string name="backup_password_help">Alamisho, historia, makala za nje ya mtandao na mipangilio, vimesimbwa kwa nenosiri hili. Liandike: bila hilo nakala haisomeki. Hakuna kinachotumwa mtandaoni.</string>
+    <string name="restore_password_help">Nenosiri ulilochagua wakati wa kuhifadhi. Data inaongezwa kwenye yako; hakuna kinachofutwa.</string>
+    <string name="backup_password_short">Angalau herufi 8.</string>
+    <string name="backup_password_mismatch">Manenosiri hayalingani.</string>
+    <string name="backup_working">Inasimba…</string>
+    <string name="backup_done">Nakala imehifadhiwa.</string>
+    <string name="backup_failed">Imeshindwa kuhifadhi nakala.</string>
+    <string name="restore_failed">Faili hili si nakala ya Zuri inayosomeka.</string>
+    <string name="restore_wrong_password">Nenosiri si sahihi, au faili limebadilishwa.</string>
+    <string name="restore_done">Imerejeshwa: alamisho %1$d, kurasa %2$d za historia, makala %3$d.</string>
 </resources>

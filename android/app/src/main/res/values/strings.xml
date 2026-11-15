@@ -176,4 +176,20 @@
     <string name="menu_default_browser">Définir comme navigateur par défaut</string>
     <string name="default_browser_done">Zuri ouvrira désormais les liens.</string>
     <string name="default_browser_manual">Choisissez Zuri dans Paramètres › Applications › Applications par défaut.</string>
+    <string name="menu_backup">Sauvegarder (fichier chiffré)</string>
+    <string name="menu_restore">Restaurer une sauvegarde</string>
+    <string name="backup_title">Sauvegarde chiffrée</string>
+    <string name="restore_title">Restaurer une sauvegarde</string>
+    <string name="backup_password">Mot de passe</string>
+    <string name="backup_password_again">Le même mot de passe</string>
+    <string name="backup_password_help">Favoris, historique, articles hors ligne et réglages, chiffrés avec ce mot de passe. Notez-le : sans lui, la sauvegarde est illisible. Rien n’est envoyé en ligne.</string>
+    <string name="restore_password_help">Mot de passe choisi lors de la sauvegarde. Les données sont ajoutées aux vôtres, rien n’est supprimé.</string>
+    <string name="backup_password_short">Au moins 8 caractères.</string>
+    <string name="backup_password_mismatch">Les deux mots de passe diffèrent.</string>
+    <string name="backup_working">Chiffrement en cours…</string>
+    <string name="backup_done">Sauvegarde enregistrée.</string>
+    <string name="backup_failed">Sauvegarde impossible.</string>
+    <string name="restore_failed">Ce fichier n’est pas une sauvegarde Zuri lisible.</string>
+    <string name="restore_wrong_password">Mot de passe incorrect, ou fichier modifié.</string>
+    <string name="restore_done">Restauré : %1$d favoris, %2$d pages d’historique, %3$d articles.</string>
 </resources>

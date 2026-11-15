@@ -69,11 +69,7 @@ object OfflineStore {
 
     private fun save(store: SecureStore, shelf: OfflineShelf) {
         val array = JSONArray()
-        for (a in shelf.list()) {
-            val blocks = JSONArray()
-            a.blocks.forEach { blocks.put(JSONArray().put(it.kind.toString()).put(it.text)) }
-            array.put(JSONObject().put("u", a.url).put("t", a.title).put("l", a.lang).put("d", a.savedAt).put("b", blocks))
-        }
+        for (a in shelf.list()) array.put(encode(a))
         try {
             store.write(JSONObject().put("v", 1).put("articles", array).toString())
         } catch (error: Exception) {
@@ -81,7 +77,13 @@ object OfflineStore {
         }
     }
 
-    private fun decode(o: JSONObject): Article? {
+    fun encode(a: Article): JSONObject {
+        val blocks = JSONArray()
+        a.blocks.forEach { blocks.put(JSONArray().put(it.kind.toString()).put(it.text)) }
+        return JSONObject().put("u", a.url).put("t", a.title).put("l", a.lang).put("d", a.savedAt).put("b", blocks)
+    }
+
+    fun decode(o: JSONObject): Article? {
         val raw = o.optJSONArray("b") ?: return null
         val blocks = (0 until raw.length()).mapNotNull { i ->
             val b = raw.optJSONArray(i) ?: return@mapNotNull null
