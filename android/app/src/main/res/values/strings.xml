@@ -154,4 +154,10 @@
     <string name="lock_unlock">Déverrouiller</string>
     <string name="lock_hidden">verrouillé</string>
     <string name="lock_no_screen_lock">Définissez un verrouillage d’écran (code, schéma ou empreinte) pour protéger les onglets privés.</string>
+    <string name="shortcut_search_short">Rechercher</string>
+    <string name="shortcut_search_long">Nouvelle recherche</string>
+    <string name="shortcut_private_short">Onglet privé</string>
+    <string name="shortcut_private_long">Nouvel onglet privé</string>
+    <string name="widget_label">Recherche Zuri</string>
+    <string name="widget_description">Rechercher ou ouvrir un onglet privé depuis l’écran d’accueil.</string>
 </resources>

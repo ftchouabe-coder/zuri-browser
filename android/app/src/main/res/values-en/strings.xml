@@ -153,4 +153,10 @@
     <string name="lock_unlock">Unlock</string>
     <string name="lock_hidden">locked</string>
     <string name="lock_no_screen_lock">Set up a screen lock (PIN, pattern or fingerprint) to protect private tabs.</string>
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">New search</string>
+    <string name="shortcut_private_short">Private tab</string>
+    <string name="shortcut_private_long">New private tab</string>
+    <string name="widget_label">Zuri search</string>
+    <string name="widget_description">Search or open a private tab from the home screen.</string>
 </resources>

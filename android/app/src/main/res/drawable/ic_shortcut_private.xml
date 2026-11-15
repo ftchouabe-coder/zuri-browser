@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#2F2A45" android:pathData="M24,24m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+    <!-- Lunettes et chapeau : symbole courant de la navigation privée. -->
+    <path android:fillColor="#FFFFFF" android:pathData="M15,21h18l-2,-7c-0.3,-1 -1.3,-1.4 -2.2,-1L24,15l-4.8,-2c-0.9,-0.4 -1.9,0 -2.2,1z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M11,22h26v2H11z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M18,26c-2.8,0 -5,2.2 -5,5s2.2,5 5,5 5,-2.2 5,-5c0,-0.3 0,-0.7 -0.1,-1h2.2c-0.1,0.3 -0.1,0.7 -0.1,1 0,2.8 2.2,5 5,5s5,-2.2 5,-5 -2.2,-5 -5,-5c-1.9,0 -3.5,1 -4.3,2.5h-1.4C21.5,27 19.9,26 18,26zM18,28c1.7,0 3,1.3 3,3s-1.3,3 -3,3 -3,-1.3 -3,-3 1.3,-3 3,-3zM30,28c1.7,0 3,1.3 3,3s-1.3,3 -3,3 -3,-1.3 -3,-3 1.3,-3 3,-3z" />
+</vector>

@@ -269,6 +269,11 @@ class BrowserActivity : Activity() {
                 val url = intent.dataString
                 if (url != null && UrlInput.isHttp(url)) createTab(url, private = false)
             }
+            ACTION_SEARCH -> {
+                // Widget ou raccourci : onglet vierge, clavier ouvert sur la barre d'adresse.
+                newTab(private = false)
+            }
+            ACTION_NEW_PRIVATE_TAB -> newTab(private = true)
             Intent.ACTION_WEB_SEARCH -> {
                 val query = intent.getStringExtra(SearchManager.QUERY)
                 if (!query.isNullOrBlank()) createTab(UrlInput.resolve(query, settings.searchEngine), private = false)
@@ -1764,7 +1769,10 @@ class BrowserActivity : Activity() {
         address.post { getSystemService(InputMethodManager::class.java)?.showSoftInput(address, InputMethodManager.SHOW_IMPLICIT) }
     }
 
-    private companion object {
+    companion object {
+        const val ACTION_SEARCH = "af.zuri.browser.SEARCH"
+        const val ACTION_NEW_PRIVATE_TAB = "af.zuri.browser.NEW_PRIVATE_TAB"
+
         @Volatile private var filterLists: FilterLists? = null
 
         /** Une seule instance par processus, partagée si l'activité est recréée. */

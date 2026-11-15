@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Appui long sur l'icône de Zuri : accès direct à la recherche et à un onglet privé. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutId="search"
+        android:shortcutLongLabel="@string/shortcut_search_long"
+        android:shortcutShortLabel="@string/shortcut_search_short">
+        <intent
+            android:action="af.zuri.browser.SEARCH"
+            android:targetClass="af.zuri.browser.BrowserActivity"
+            android:targetPackage="af.zuri.browser" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_private"
+        android:shortcutId="private"
+        android:shortcutLongLabel="@string/shortcut_private_long"
+        android:shortcutShortLabel="@string/shortcut_private_short">
+        <intent
+            android:action="af.zuri.browser.NEW_PRIVATE_TAB"
+            android:targetClass="af.zuri.browser.BrowserActivity"
+            android:targetPackage="af.zuri.browser" />
+    </shortcut>
+</shortcuts>
