@@ -3,7 +3,6 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
 }
 
 // Clé de signature release : fichier local non versionné (voir android/README.md).
@@ -14,7 +13,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "af.zuri.browser"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "af.zuri.browser"
@@ -59,13 +58,29 @@ android {
 }
 
 // La liste de secours CC0 du bureau est embarquée telle quelle (une seule source de vérité).
-val zuriAssets = layout.buildDirectory.dir("generated/zuriAssets")
-val copyBaseFilters by tasks.registering(Copy::class) {
-    from(rootProject.file("../resources/base-filters.txt"))
-    into(zuriAssets)
+abstract class CopyBaseFilters : DefaultTask() {
+    @get:InputFile
+    abstract val source: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = outputDir.get().asFile.apply { mkdirs() }
+        source.get().asFile.copyTo(out.resolve("base-filters.txt"), overwrite = true)
+    }
 }
-android.sourceSets["main"].assets.srcDir(zuriAssets)
-tasks.named("preBuild") { dependsOn(copyBaseFilters) }
+
+val copyBaseFilters = tasks.register<CopyBaseFilters>("copyBaseFilters") {
+    source.set(rootProject.layout.projectDirectory.file("../resources/base-filters.txt"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyBaseFilters, CopyBaseFilters::outputDir)
+    }
+}
 
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
