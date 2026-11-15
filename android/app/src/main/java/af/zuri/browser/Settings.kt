@@ -9,6 +9,7 @@ data class Settings(
     val safeBrowsing: Boolean = true,
     val httpsOnly: Boolean = true,
     val blockThirdPartyCookies: Boolean = true,
+    /** Économiseur de données : images bloquées sur réseau payant (données mobiles), pas en Wi-Fi. */
     val dataSaver: Boolean = false,
     val autoplay: Boolean = false,
     val restoreSession: Boolean = true,

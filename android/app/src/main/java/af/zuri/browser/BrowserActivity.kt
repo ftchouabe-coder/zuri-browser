@@ -12,6 +12,9 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -110,6 +113,9 @@ class BrowserActivity : Activity() {
     private var permissionDialogRequest: PermissionRequest? = null
     /** Choix faits pendant la session : "privé|origine|ressource" -> autorisé. Jamais écrits sur disque. */
     private val sitePermissions = HashMap<String, Boolean>()
+    /** Réseau payant (données mobiles, partage de connexion…) : lu par l'économiseur de données. */
+    @Volatile private var metered = false
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val privateSupported by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }
 
     // ---------------------------------------------------------------- cycle de vie
@@ -175,6 +181,7 @@ class BrowserActivity : Activity() {
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         registerBackHandler()
         filters // chargement des listes en tâche de fond
+        watchNetwork()
         // Reste d'une session privée interrompue (application tuée) : effacé avant tout.
         clearPrivateData(atStartup = true)
 
@@ -204,6 +211,7 @@ class BrowserActivity : Activity() {
     }
 
     override fun onDestroy() {
+        networkCallback?.let { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) }
         tts?.shutdown()
         tts = null
         val hadPrivate = tabs.any { it.isPrivate }
@@ -357,7 +365,7 @@ class BrowserActivity : Activity() {
         val s = webView.settings
         s.safeBrowsingEnabled = settings.safeBrowsing
         s.mediaPlaybackRequiresUserGesture = !settings.autoplay
-        s.blockNetworkImage = settings.dataSaver
+        s.blockNetworkImage = imagesBlocked(tab)
         s.userAgentString = userAgent(tab.desktopMode)
         // Mode sombre du téléphone : les sites sans thème sombre sont assombris par le moteur.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
@@ -825,6 +833,7 @@ class BrowserActivity : Activity() {
             val marked = library.isBookmarked(tab.url)
             menu.add(0, M_BOOKMARK, 6, if (marked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
         }
+        if (imagesBlocked(tab) && UrlInput.isHttp(tab.url) && !tab.internalPage) menu.add(0, M_IMAGES, 4, R.string.menu_show_images)
         if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
             menu.add(0, M_FIND, 5, R.string.menu_find)
             menu.add(0, M_READER, 5, R.string.menu_reader)
@@ -854,6 +863,11 @@ class BrowserActivity : Activity() {
                 }
                 M_CLOSE_PRIVATE -> tabs.filter { it.isPrivate }.forEach(::closeTab)
                 M_FIND -> showFind()
+                M_IMAGES -> {
+                    tab.forceImages = true
+                    applySettings(tab)
+                    tab.webView.reload()
+                }
                 M_READER -> openReader(tab)
                 M_OFFLINE_SAVE -> saveOffline(tab)
                 M_OFFLINE_LIST -> showOffline()
@@ -878,6 +892,7 @@ class BrowserActivity : Activity() {
         }
         lines += getString(R.string.shield_blocked, tab.blocked.get())
         lines += getString(R.string.shield_popups, tab.popups.blocked)
+        if (imagesBlocked(tab)) lines += getString(R.string.shield_images_blocked)
         savingsSummary()?.let { lines += it }
         val updated = filters.securityUpdatedAt
         lines += if (!settings.safeBrowsing) {
@@ -1147,6 +1162,31 @@ class BrowserActivity : Activity() {
     private fun stopSpeech() {
         tts?.stop()
         speaking = false
+    }
+
+    // ---------------------------------------------------------------- économiseur de données
+
+    private fun imagesBlocked(tab: Tab) = settings.dataSaver && metered && !tab.forceImages
+
+    /** Suit le réseau actif : les images reviennent dès le passage en Wi-Fi, et inversement. */
+    private fun watchNetwork() {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return
+        metered = manager.isActiveNetworkMetered
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                val now = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                if (now != metered) {
+                    metered = now
+                    runOnUiThread { tabs.forEach { applySettings(it) } }
+                }
+            }
+        }
+        try {
+            manager.registerDefaultNetworkCallback(callback)
+            networkCallback = callback
+        } catch (_: RuntimeException) {
+            // Trop de rappels enregistrés ou service indisponible : on garde l'état initial.
+        }
     }
 
     // ---------------------------------------------------------------- recherche dans la page
@@ -1658,5 +1698,6 @@ class BrowserActivity : Activity() {
         const val M_SPEAK_STOP = 17
         const val M_OFFLINE_SAVE = 18
         const val M_OFFLINE_LIST = 19
+        const val M_IMAGES = 20
     }
 }

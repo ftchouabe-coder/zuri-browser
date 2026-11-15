@@ -61,7 +61,7 @@
     <string name="set_safe">Protection contre le phishing et les logiciels malveillants</string>
     <string name="set_https">HTTPS uniquement</string>
     <string name="set_cookies">Bloquer les cookies tiers</string>
-    <string name="set_datasaver">Économiseur de données (sans images)</string>
+    <string name="set_datasaver">Économiseur de données : images seulement en Wi‑Fi</string>
     <string name="set_autoplay">Lecture automatique des vidéos</string>
     <string name="set_restore">Rouvrir les onglets au démarrage</string>
     <string name="ok">OK</string>
@@ -145,4 +145,6 @@
     <string name="offline_private">Rien n’est enregistré depuis un onglet privé.</string>
     <string name="offline_empty">Aucun article enregistré. Sur une page, choisissez « Enregistrer pour lire hors ligne » dans le menu.</string>
     <string name="offline_note">Version enregistrée le %1$s, lisible sans connexion.</string>
+    <string name="menu_show_images">Afficher les images (cet onglet)</string>
+    <string name="shield_images_blocked">Images en attente du Wi‑Fi : vous êtes sur données mobiles (économiseur activé).</string>
 </resources>

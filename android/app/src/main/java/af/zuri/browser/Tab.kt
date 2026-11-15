@@ -43,4 +43,6 @@ class Tab(val id: Int, val isPrivate: Boolean, val parentId: Int?, private val f
     var scriptKey = ""
     /** Article extrait (mode lecture, voix, lecture hors ligne). */
     var article: Article? = null
+    /** L'utilisateur a demandé les images malgré l'économiseur de données. */
+    var forceImages = false
 }

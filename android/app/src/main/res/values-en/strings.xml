@@ -60,7 +60,7 @@
     <string name="set_safe">Phishing and malware protection</string>
     <string name="set_https">HTTPS-only</string>
     <string name="set_cookies">Block third-party cookies</string>
-    <string name="set_datasaver">Data saver (no images)</string>
+    <string name="set_datasaver">Data saver: images on Wi‑Fi only</string>
     <string name="set_autoplay">Autoplay videos</string>
     <string name="set_restore">Reopen tabs on startup</string>
     <string name="ok">OK</string>
@@ -144,4 +144,6 @@
     <string name="offline_private">Nothing is saved from a private tab.</string>
     <string name="offline_empty">No saved articles. On a page, choose “Save for offline reading” in the menu.</string>
     <string name="offline_note">Version saved on %1$s, readable without a connection.</string>
+    <string name="menu_show_images">Show images (this tab)</string>
+    <string name="shield_images_blocked">Images waiting for Wi‑Fi: you are on mobile data (data saver on).</string>
 </resources>
