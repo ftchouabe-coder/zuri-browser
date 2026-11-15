@@ -25,6 +25,9 @@ import { isHttpUrl, resolveInput } from './search'
 import { getSettings, updateSettings } from './settings'
 import type { TabManager } from './tabs'
 import { savingsThisMonth } from './savings'
+import { exportBackup, importBackup } from './backup'
+import { listBookmarks as allBookmarks } from './bookmarks'
+import { listHistory as allHistory } from './history'
 
 export interface AppContext {
   window: BrowserWindow
@@ -347,6 +350,24 @@ export function registerIpc(): void {
       }
       return tuple(args[0] as 'all' | 'history' | 'cookies')
     }
+  )
+  handle(
+    'zuri:backup:export',
+    (password: string) => exportBackup(context().window, password),
+    (args) => tuple(str(args[0], 1024, 'password'))
+  )
+  handle(
+    'zuri:backup:import',
+    async (password: string) => {
+      const result = await importBackup(context().window, password)
+      if (result.ok) {
+        broadcast(EVENTS.bookmarks, allBookmarks())
+        broadcast(EVENTS.history, allHistory())
+        broadcast(EVENTS.settings, getSettings())
+      }
+      return result
+    },
+    (args) => tuple(str(args[0], 1024, 'password'))
   )
   handle(
     'zuri:privacy:state',

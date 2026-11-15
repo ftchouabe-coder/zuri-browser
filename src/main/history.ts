@@ -99,3 +99,21 @@ export function topSites(limit = 8): HistoryEntry[] {
 export function flushHistory(): void {
   store.flushNow()
 }
+
+/** Historique d'une sauvegarde, fusionné : à URL égale, la visite la plus récente gagne. */
+export function importHistory(items: { url: string; title: string; time: number }[]): number {
+  const byUrl = new Map(store.get().map((entry) => [entry.url, entry]))
+  let added = 0
+  for (const item of items) {
+    if (!/^https?:\/\//i.test(item.url)) continue
+    const known = byUrl.get(item.url)
+    if (!known) {
+      byUrl.set(item.url, { url: item.url, title: item.title || item.url, visitedAt: item.time, visits: 1 })
+      added++
+    } else if (item.time > known.visitedAt) {
+      byUrl.set(item.url, { ...known, title: item.title || known.title, visitedAt: item.time })
+    }
+  }
+  persist([...byUrl.values()].sort((a, b) => b.visitedAt - a.visitedAt))
+  return added
+}

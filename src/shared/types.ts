@@ -121,6 +121,11 @@ export interface Bookmark {
   createdAt: number
 }
 
+/** Résultat d'un export ou d'un import de sauvegarde chiffrée. */
+export type BackupResult =
+  | { ok: true; bookmarks?: number; history?: number; offlineSkipped?: number }
+  | { ok: false; error: 'cancelled' | 'wrong-password' | 'invalid' | 'failed' | 'too-short' }
+
 export interface HistoryEntry {
   url: string
   title: string
@@ -243,6 +248,10 @@ export interface ZuriApi {
     openExternal(url: string): Promise<void>
     searchUrl(query: string): Promise<string>
     openMenu(x: number, y: number): void
+  }
+  backup: {
+    export(password: string): Promise<BackupResult>
+    import(password: string): Promise<BackupResult>
   }
   privacy: {
     state(): Promise<{

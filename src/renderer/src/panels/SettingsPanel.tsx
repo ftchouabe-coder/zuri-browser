@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react'
+import { useState, type JSX, type ReactNode } from 'react'
 import {
   DNS_PROVIDERS,
   SEARCH_ENGINES,
@@ -306,6 +306,8 @@ export function SettingsPanel({
           </div>
         </section>
 
+        <BackupSection t={t} />
+
         <section className="settings-card meta-card">
           <h2>
             <Icon name="info" size={16} /> {t('settings.about')}
@@ -343,5 +345,87 @@ export function SettingsPanel({
         </section>
       </div>
     </Panel>
+  )
+}
+
+/**
+ * Sauvegarde chiffrée échangeable avec la version Android (même fichier .zuri). Le mot de passe
+ * ne quitte pas l'appareil : il sert seulement à chiffrer ou déchiffrer le fichier choisi.
+ */
+function BackupSection({ t }: { t: Translate }): JSX.Element {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const describe = (result: Awaited<ReturnType<typeof window.zuri.backup.export>>, exported: boolean): void => {
+    if (result.ok) {
+      setStatus({
+        ok: true,
+        text: exported
+          ? t('backup.exported')
+          : t('backup.imported')
+              .replace('{b}', String(result.bookmarks ?? 0))
+              .replace('{h}', String(result.history ?? 0))
+      })
+      setPassword('')
+      setConfirm('')
+    } else if (result.error !== 'cancelled') {
+      setStatus({ ok: false, text: t(`backup.error.${result.error}`) })
+    }
+  }
+
+  const run = async (exporting: boolean): Promise<void> => {
+    if (password.length < 8) return setStatus({ ok: false, text: t('backup.error.too-short') })
+    if (exporting && password !== confirm) return setStatus({ ok: false, text: t('backup.error.mismatch') })
+    setBusy(true)
+    setStatus(null)
+    try {
+      describe(exporting ? await window.zuri.backup.export(password) : await window.zuri.backup.import(password), exporting)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <h2>
+        <Icon name="shield" size={16} /> {t('backup.title')}
+      </h2>
+      <p className="muted">{t('backup.desc')}</p>
+      <div className="backup-fields">
+        <input
+          type="password"
+          className="backup-input"
+          autoComplete="new-password"
+          placeholder={t('backup.password')}
+          aria-label={t('backup.password')}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <input
+          type="password"
+          className="backup-input"
+          autoComplete="new-password"
+          placeholder={t('backup.confirm')}
+          aria-label={t('backup.confirm')}
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+        />
+      </div>
+      <div className="danger-zone">
+        <button type="button" className="btn primary" disabled={busy} onClick={() => void run(true)}>
+          {t('backup.export')}
+        </button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={() => void run(false)}>
+          {t('backup.import')}
+        </button>
+      </div>
+      {status && (
+        <p className={status.ok ? 'backup-status ok' : 'backup-status error'} role="status">
+          {status.text}
+        </p>
+      )}
+    </section>
   )
 }

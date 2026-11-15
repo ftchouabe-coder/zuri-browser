@@ -1504,6 +1504,20 @@ button.stat:hover {
   background: var(--surface-2);
 }
 
+.btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn.primary:hover {
+  background: color-mix(in srgb, var(--accent) 86%, #000);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .btn.danger {
   background: var(--terracotta);
   color: #fff;
@@ -2103,3 +2117,14 @@ button.stat:hover {
     background: Highlight;
   }
 }
+
+/* Sauvegarde chiffrée (réglages) */
+.backup-fields { display: grid; gap: 8px; margin: 12px 0; }
+.backup-input {
+  height: 36px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font: inherit;
+}
+.backup-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.backup-status { margin: 10px 0 0; font-size: 13px; }
+.backup-status.ok { color: var(--success); }
+.backup-status.error { color: var(--danger); }

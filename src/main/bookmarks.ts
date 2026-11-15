@@ -63,3 +63,22 @@ export function removeBookmarkByUrl(url: string): Bookmark[] {
 export function flushBookmarks(): void {
   store.flushNow()
 }
+
+/** Favoris d'une sauvegarde : ajoutés s'ils sont absents, rien n'est supprimé. Renvoie le nombre ajouté. */
+export function importBookmarks(items: { url: string; title: string; time: number }[]): number {
+  const existing = store.get()
+  const known = new Set(existing.map((item) => item.url))
+  const added: Bookmark[] = []
+  for (const item of items) {
+    if (!/^https?:\/\//i.test(item.url) || known.has(item.url)) continue
+    known.add(item.url)
+    added.push({
+      id: randomUUID(),
+      title: (item.title || hostOf(item.url)).slice(0, 200),
+      url: item.url,
+      createdAt: item.time > 0 ? item.time : Date.now()
+    })
+  }
+  if (added.length) store.set([...existing, ...added])
+  return added.length
+}

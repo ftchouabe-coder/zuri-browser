@@ -24,6 +24,8 @@
 - Favoris, historique, téléchargements, panneaux de gestion.
 - Bouclier réseau : anti-pub/anti-trace (`@ghostery/adblocker-electron`), filtrage cosmétique dynamique et scriptlets, économie de données, HTTPS-only avec possibilité de continuer en HTTP ponctuellement.
 - Protection anti-phishing et anti-malware : les sites signalés sont bloqués avant chargement, avec une page d’avertissement. Les listes sont vérifiées **sur votre appareil**, aucune adresse visitée n’est transmise.
+- Sauvegarde chiffrée échangeable avec Zuri pour Android (Réglages › Sauvegarde chiffrée) : favoris, historique et réglages communs dans un fichier `.zuri` protégé par mot de passe (AES-256-GCM, PBKDF2 310 000 itérations), pour passer du téléphone au PC et inversement, sans serveur.
+- Compteur de données économisées ce mois-ci sur la page d’accueil (estimation prudente de 15 Ko par élément bloqué).
 - Faux sites de mobile money et de banque : un nom de domaine qui imite Orange Money, MTN MoMo, Wave, M-Pesa, Ecobank, Western Union, PayPal… (`orange-money-bonus.xyz`, `0range-money.com`, lettres cyrilliques) déclenche un avertissement avant le chargement, même si le site est trop récent pour figurer dans les listes publiques.
 - Fenêtres surgissantes ouvertes en onglet en gardant le lien avec la page d’origine (connexions Google, Microsoft, paiements…), rafales bloquées et signalées dans la barre d’adresse.
 - Permissions sensibles (caméra, micro, géolocalisation, notifications, presse-papiers, MIDI) demandées à l’origine, mémorisées localement, réinitialisables.

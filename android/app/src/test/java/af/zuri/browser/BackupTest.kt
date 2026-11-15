@@ -36,6 +36,26 @@ class BackupTest {
         assertTrue(runCatching { BackupCrypto.open("PK\u0003\u0004zip".toByteArray(), password) }.exceptionOrNull() is BackupCrypto.InvalidFile)
     }
 
+    /** Produit le vecteur relu par le bureau (tests/unit/backup.test.ts). */
+    @Test
+    fun vecteurPourLeBureau() {
+        val sealed = BackupCrypto.seal(VECTOR_PLAIN.toByteArray(), password, BackupCrypto.TEST_ITERATIONS)
+        println("VECTEUR_ANDROID=" + java.util.Base64.getEncoder().encodeToString(sealed))
+        assertArrayEquals(VECTOR_PLAIN.toByteArray(), BackupCrypto.open(sealed, password))
+    }
+
+    /** Fichier produit par la version de bureau (Node, `sealBackup`) : doit se relire ici. */
+    @Test
+    fun relitUneSauvegardeDuBureau() {
+        val fromDesktop = java.util.Base64.getDecoder().decode(DESKTOP_VECTOR)
+        assertEquals(VECTOR_PLAIN, String(BackupCrypto.open(fromDesktop, password)))
+    }
+
+    private companion object {
+        const val VECTOR_PLAIN = "{\"format\":\"zuri-sauvegarde\",\"v\":1,\"bookmarks\":[{\"u\":\"https://jumia.com.ng/\",\"t\":\"Jumia\",\"d\":5}]}"
+        const val DESKTOP_VECTOR = "WkJLMQAAA+ixf88QkoUcSXGoGzP64IffSLJzsYtVENb8zS3rTQln6uG6nyR3BPI1W6LKf26rZTooNkCj/P+gI5QKdHH4v64scCJKn0lsdTPheljFkCz1ELIksJJ319Riflw7lH5CIY1+YZxWm8VXvhNVF9lKnWWl+l+tFmRmL9Lw00CgrhFfyHJ+gFD2sHhyEBy7lg=="
+    }
+
     @Test
     fun fusionDeLaBibliotheque() {
         val lib = Library()

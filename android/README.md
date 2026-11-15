@@ -34,7 +34,7 @@ la version de bureau quand Android le permet.
 | Téléchargements | Sur données mobiles, « Attendre le Wi‑Fi » diffère le téléchargement jusqu'au prochain réseau Wi‑Fi. |
 | Nouvelles versions | Vérification hebdomadaire sur GitHub, en Wi‑Fi seulement (désactivable). Android n'installe une mise à jour que si elle est signée par la même clé. |
 | Langues | Français, anglais, portugais et swahili, à choisir dans le menu « Langue · Language », y compris avant Android 13. La traduction swahilie est à faire relire. |
-| Sauvegarde chiffrée | « Bibliothèque › Sauvegarder » : favoris, historique, articles hors ligne et réglages dans un fichier protégé par mot de passe (AES-256-GCM, PBKDF2 310 000 itérations), pour changer de téléphone. La restauration ajoute les données sans rien supprimer. |
+| Sauvegarde chiffrée | « Bibliothèque › Sauvegarder » : favoris, historique, articles hors ligne et réglages dans un fichier protégé par mot de passe (AES-256-GCM, PBKDF2 310 000 itérations), pour changer de téléphone. La restauration ajoute les données sans rien supprimer. Le même fichier se lit et se crée dans Zuri pour Windows (Réglages › Sauvegarde chiffrée) : compatibilité vérifiée dans les deux sens par des vecteurs de test. Le bureau n'ayant pas de lecture hors ligne, il ignore les articles enregistrés. |
 | Favoris et historique | Chiffrés sur le téléphone (AES-256-GCM, clé du Keystore Android), jamais alimentés par les onglets privés. Les suggestions de la barre d'adresse sont calculées sur l'appareil : rien n'est envoyé au moteur pendant la saisie. |
 
 Aucune donnée n'est sauvegardée dans le cloud et aucune statistique n'est envoyée.

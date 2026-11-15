@@ -62,6 +62,10 @@ const api: ZuriApi = {
   privacy: {
     state: () => ipcRenderer.invoke('zuri:privacy:state')
   },
+  backup: {
+    export: (password) => ipcRenderer.invoke('zuri:backup:export', password),
+    import: (password) => ipcRenderer.invoke('zuri:backup:import', password)
+  },
   on<T = unknown>(event: string, listener: (payload: T) => void) {
     if (!ALLOWED_EVENTS.has(event)) return () => undefined
     const wrapped = (_event: Electron.IpcRendererEvent, payload: unknown): void =>
