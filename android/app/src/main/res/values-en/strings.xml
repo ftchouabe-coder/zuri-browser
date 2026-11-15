@@ -84,4 +84,20 @@
     <string name="shield_lists_ready">Phishing and malware lists up to date (%1$s).</string>
     <string name="shield_lists_pending">Downloading phishing and malware lists…</string>
     <string name="shield_lists_off">Phishing protection is turned off in settings.</string>
+
+    <string name="private_unsupported">Private browsing needs a newer version of “Android System WebView” (Play Store).</string>
+    <string name="perm_title">Permission requested</string>
+    <string name="perm_message">%1$s wants to use: %2$s.</string>
+    <string name="perm_camera">the camera</string>
+    <string name="perm_mic">the microphone</string>
+    <string name="perm_location">your location</string>
+    <string name="perm_drm">protected content playback (device identifier)</string>
+    <string name="perm_allow">Allow</string>
+    <string name="perm_block">Block</string>
+    <string name="download_from">From %1$s</string>
+    <string name="download_danger">Warning: this type of file can install an app or run code. Only open it if you trust this site.</string>
+    <string name="download_private_note">The file will stay in “Downloads” after the private tab is closed.</string>
+    <string name="download_confirm">Download</string>
+    <string name="download_started">Download started: %1$s</string>
+    <string name="download_unsupported">This download is not supported.</string>
 </resources>

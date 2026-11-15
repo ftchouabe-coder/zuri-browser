@@ -85,4 +85,20 @@
     <string name="shield_lists_ready">Listes anti-phishing et anti-malware à jour (%1$s).</string>
     <string name="shield_lists_pending">Listes anti-phishing et anti-malware en cours de téléchargement…</string>
     <string name="shield_lists_off">Protection anti-phishing désactivée dans les réglages.</string>
+
+    <string name="private_unsupported">La navigation privée nécessite une version plus récente d’« Android System WebView » (Play Store).</string>
+    <string name="perm_title">Autorisation demandée</string>
+    <string name="perm_message">%1$s demande l’accès à : %2$s.</string>
+    <string name="perm_camera">la caméra</string>
+    <string name="perm_mic">le micro</string>
+    <string name="perm_location">votre position</string>
+    <string name="perm_drm">la lecture de contenus protégés (identifiant de l’appareil)</string>
+    <string name="perm_allow">Autoriser</string>
+    <string name="perm_block">Bloquer</string>
+    <string name="download_from">Depuis %1$s</string>
+    <string name="download_danger">Attention : ce type de fichier peut installer une application ou exécuter du code. Ne l’ouvrez que si vous faites confiance à ce site.</string>
+    <string name="download_private_note">Le fichier restera dans « Téléchargements » après la fermeture de l’onglet privé.</string>
+    <string name="download_confirm">Télécharger</string>
+    <string name="download_started">Téléchargement lancé : %1$s</string>
+    <string name="download_unsupported">Ce téléchargement n’est pas pris en charge.</string>
 </resources>

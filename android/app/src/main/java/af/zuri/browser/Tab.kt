@@ -4,7 +4,18 @@ import android.webkit.WebView
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-class Tab(val id: Int, val isPrivate: Boolean, val webView: WebView, val parentId: Int?) {
+/**
+ * Un onglet. Sa WebView n'est créée qu'au premier usage : les onglets restaurés au démarrage
+ * ne coûtent ni mémoire ni temps tant qu'on ne les ouvre pas (important sur entrée de gamme).
+ */
+class Tab(val id: Int, val isPrivate: Boolean, val parentId: Int?, private val factory: (Tab) -> WebView) {
+    private var view: WebView? = null
+
+    val webView: WebView
+        get() = view ?: factory(this).also { view = it }
+
+    val hasWebView: Boolean get() = view != null
+
     /** URL affichée dans la barre d'adresse (vide pour la page d'accueil). */
     var url = ""
     var title = ""

@@ -1,17 +1,21 @@
 package af.zuri.browser
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.DownloadManager
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Message
 import android.os.SystemClock
 import android.text.InputType
@@ -25,6 +29,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.HttpAuthHandler
+import android.webkit.URLUtil
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -48,7 +53,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.ProfileStore
 import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import java.net.URISyntaxException
@@ -79,6 +86,13 @@ class BrowserActivity : Activity() {
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingPermissions: ((Boolean) -> Unit)? = null
+    private var permissionsAnyOf = false
+    private var permissionDialog: AlertDialog? = null
+    private var permissionDialogRequest: PermissionRequest? = null
+    /** Choix faits pendant la session : "privé|origine|ressource" -> autorisé. Jamais écrits sur disque. */
+    private val sitePermissions = HashMap<String, Boolean>()
+    private val privateSupported by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }
 
     // ---------------------------------------------------------------- cycle de vie
 
@@ -131,6 +145,8 @@ class BrowserActivity : Activity() {
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         registerBackHandler()
         filters // chargement des listes en tâche de fond
+        // Reste d'une session privée interrompue (application tuée) : effacé avant tout.
+        clearPrivateData(atStartup = true)
 
         if (settings.restoreSession) restoreSession()
         handleIntent(intent)
@@ -157,8 +173,10 @@ class BrowserActivity : Activity() {
     }
 
     override fun onDestroy() {
+        val hadPrivate = tabs.any { it.isPrivate }
         for (tab in tabs) destroyWebView(tab)
         tabs.clear()
+        if (hadPrivate) clearPrivateData()
         super.onDestroy()
     }
 
@@ -224,6 +242,10 @@ class BrowserActivity : Activity() {
     // ---------------------------------------------------------------- onglets
 
     private fun newTab(private: Boolean) {
+        if (private && !privateSupported) {
+            toast(R.string.private_unsupported)
+            return
+        }
         createTab(null, private)
         address.requestFocus()
         showKeyboard()
@@ -237,12 +259,7 @@ class BrowserActivity : Activity() {
         parentId: Int? = null,
         pendingUrl: String? = null
     ): Tab {
-        val webView = WebView(this)
-        val tab = Tab(nextTabId++, private, webView, parentId)
-        configure(tab)
-        webView.webViewClient = ZuriWebViewClient(this, tab)
-        webView.webChromeClient = ZuriChromeClient(this, tab)
-
+        val tab = Tab(nextTabId++, private, parentId, ::buildWebView)
         val parentIndex = parentId?.let { id -> tabs.indexOfFirst { it.id == id } } ?: -1
         if (parentIndex >= 0) tabs.add(parentIndex + 1, tab) else tabs.add(tab)
 
@@ -256,14 +273,28 @@ class BrowserActivity : Activity() {
             parentId == null -> showStartPage(tab)
             // Fenêtre surgissante : le contenu arrive par WebViewTransport.
         }
-        if (foreground) selectTab(tab) else webView.onPause()
+        if (foreground) selectTab(tab) else if (tab.hasWebView) tab.webView.onPause()
         render()
         return tab
     }
 
+    /** Création effective de la WebView d'un onglet, au premier usage. */
+    private fun buildWebView(tab: Tab): WebView {
+        val webView = WebView(this)
+        // Onglet privé : profil WebView distinct (cookies, stockage, cache, autorisations).
+        if (tab.isPrivate) WebViewCompat.setProfile(webView, PRIVATE_PROFILE)
+        configure(tab, webView)
+        webView.setDownloadListener { url, agent, disposition, mime, length ->
+            onDownload(tab, url, agent, disposition, mime, length)
+        }
+        webView.webViewClient = ZuriWebViewClient(this, tab)
+        webView.webChromeClient = ZuriChromeClient(this, tab)
+        return webView
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
-    private fun configure(tab: Tab) {
-        val s = tab.webView.settings
+    private fun configure(tab: Tab, webView: WebView) {
+        val s = webView.settings
         s.javaScriptEnabled = true
         s.domStorageEnabled = true
         s.allowFileAccess = false
@@ -280,19 +311,23 @@ class BrowserActivity : Activity() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
             WebSettingsCompat.setRequestedWithHeaderOriginAllowList(s, emptySet())
         }
-        applySettings(tab)
+        applySettings(tab, webView)
     }
 
-    private fun applySettings(tab: Tab) {
-        val s = tab.webView.settings
+    private fun applySettings(tab: Tab, webView: WebView? = if (tab.hasWebView) tab.webView else null) {
+        // Onglet pas encore ouvert : les réglages seront appliqués à la création de sa WebView.
+        if (webView == null) return
+        val s = webView.settings
         s.safeBrowsingEnabled = settings.safeBrowsing
         s.mediaPlaybackRequiresUserGesture = !settings.autoplay
         s.blockNetworkImage = settings.dataSaver
         s.userAgentString = userAgent(tab.desktopMode)
-        cookieManagerFor(tab).setAcceptThirdPartyCookies(tab.webView, !settings.blockThirdPartyCookies)
+        cookieManagerFor(tab).setAcceptThirdPartyCookies(webView, !settings.blockThirdPartyCookies)
     }
 
-    private fun cookieManagerFor(@Suppress("UNUSED_PARAMETER") tab: Tab): CookieManager = CookieManager.getInstance()
+    private fun cookieManagerFor(tab: Tab): CookieManager =
+        if (tab.isPrivate) ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE).cookieManager
+        else CookieManager.getInstance()
 
     /** Agent utilisateur de Chrome : sans le marqueur « wv », certains sites dégradent l'affichage. */
     private fun userAgent(desktop: Boolean): String {
@@ -304,7 +339,7 @@ class BrowserActivity : Activity() {
 
     private fun selectTab(tab: Tab) {
         val previous = current
-        if (previous != null && previous !== tab) {
+        if (previous != null && previous !== tab && previous.hasWebView) {
             previous.webView.onPause()
             content.removeView(previous.webView)
         }
@@ -326,6 +361,7 @@ class BrowserActivity : Activity() {
         tabs.removeAt(index)
         actions.forgetTab(tab.id)
         destroyWebView(tab)
+        if (tab.isPrivate && tabs.none { it.isPrivate }) clearPrivateData()
         if (current === tab) {
             current = null
             val next = tabs.firstOrNull { it.id == tab.parentId } ?: tabs.getOrNull(index.coerceAtMost(tabs.size - 1))
@@ -335,6 +371,7 @@ class BrowserActivity : Activity() {
     }
 
     private fun destroyWebView(tab: Tab) {
+        if (!tab.hasWebView) return
         content.removeView(tab.webView)
         tab.webView.stopLoading()
         tab.webView.webChromeClient = null
@@ -649,11 +686,12 @@ class BrowserActivity : Activity() {
         tabsButton.text = if (tabs.size > 99) "∞" else tabs.size.toString()
         tabsButton.contentDescription = getString(R.string.tabs_desc, tabs.size)
 
-        val tint = if (tab.isPrivate) ColorStateList.valueOf(Color.WHITE) else null
-        toolbar.setBackgroundColor(getColor(if (tab.isPrivate) R.color.private_bar else R.color.surface))
-        tabsButton.setTextColor(if (tab.isPrivate) Color.WHITE else getColor(R.color.ink))
-        menuButton.imageTintList = tint
-        shieldButton.imageTintList = tint
+        // Une teinte explicite dans les deux cas : `null` effacerait aussi celle du vecteur.
+        val private = tab.isPrivate
+        toolbar.setBackgroundColor(getColor(if (private) R.color.private_bar else R.color.surface))
+        tabsButton.setTextColor(if (private) Color.WHITE else getColor(R.color.ink))
+        menuButton.imageTintList = ColorStateList.valueOf(if (private) Color.WHITE else getColor(R.color.ink))
+        shieldButton.imageTintList = ColorStateList.valueOf(if (private) Color.WHITE else getColor(R.color.acacia))
     }
 
     private fun showTabs() {
@@ -813,7 +851,7 @@ class BrowserActivity : Activity() {
         GeolocationPermissions.getInstance().clearAll()
         WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
         current?.webView?.clearCache(true)
-        for (tab in tabs) tab.webView.clearFormData()
+        for (tab in tabs) if (tab.hasWebView) tab.webView.clearFormData()
         toast(R.string.cleared)
     }
 
@@ -842,14 +880,209 @@ class BrowserActivity : Activity() {
             .show()
     }
 
+    /**
+     * Caméra, micro, contenus protégés : refus par défaut, question à l'utilisateur, choix retenu
+     * pour la session seulement (et séparément pour les onglets privés).
+     */
     internal fun onPermissionRequest(tab: Tab, request: PermissionRequest) {
-        request.deny()
+        val origin = request.origin.toString().trimEnd('/')
+        val wanted = request.resources.filter {
+            it == PermissionRequest.RESOURCE_VIDEO_CAPTURE || it == PermissionRequest.RESOURCE_AUDIO_CAPTURE ||
+                it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+        }
+        if (wanted.isEmpty() || !origin.startsWith("https://", true) && !isLocalOrigin(origin)) {
+            request.deny()
+            return
+        }
+        val keys = wanted.map { permissionKey(tab, origin, it) }
+        if (keys.all { sitePermissions[it] == true }) {
+            grantWithRuntime(request, wanted)
+            return
+        }
+        if (keys.any { sitePermissions[it] == false }) {
+            request.deny()
+            return
+        }
+        val labels = wanted.map {
+            getString(
+                when (it) {
+                    PermissionRequest.RESOURCE_VIDEO_CAPTURE -> R.string.perm_camera
+                    PermissionRequest.RESOURCE_AUDIO_CAPTURE -> R.string.perm_mic
+                    else -> R.string.perm_drm
+                }
+            )
+        }
+        permissionDialog?.dismiss()
+        permissionDialogRequest = request
+        permissionDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.perm_title)
+            .setMessage(getString(R.string.perm_message, UrlInput.displayHost(origin), labels.joinToString(", ")))
+            .setPositiveButton(R.string.perm_allow) { _, _ ->
+                keys.forEach { sitePermissions[it] = true }
+                grantWithRuntime(request, wanted)
+            }
+            .setNegativeButton(R.string.perm_block) { _, _ ->
+                keys.forEach { sitePermissions[it] = false }
+                request.deny()
+            }
+            .setOnCancelListener { request.deny() }
+            .setOnDismissListener { if (permissionDialogRequest === request) permissionDialogRequest = null }
+            .show()
     }
 
-    internal fun onPermissionCanceled(request: PermissionRequest) = Unit
+    internal fun onPermissionCanceled(request: PermissionRequest) {
+        if (permissionDialogRequest === request) {
+            permissionDialogRequest = null
+            permissionDialog?.dismiss()
+        }
+    }
+
+    private fun grantWithRuntime(request: PermissionRequest, resources: List<String>) {
+        val runtime = buildList {
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in resources) add(Manifest.permission.CAMERA)
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in resources) add(Manifest.permission.RECORD_AUDIO)
+        }
+        withRuntimePermissions(runtime) { granted ->
+            if (granted) request.grant(resources.toTypedArray()) else request.deny()
+        }
+    }
 
     internal fun onGeolocationRequest(tab: Tab, origin: String, callback: GeolocationPermissions.Callback) {
-        callback.invoke(origin, false, false)
+        val key = permissionKey(tab, origin.trimEnd('/'), "geolocation")
+        val respond = { allowed: Boolean ->
+            if (!allowed) {
+                callback.invoke(origin, false, false)
+            } else {
+                val location = listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
+                // retain = false : rien n'est mémorisé par la WebView elle-même.
+                withRuntimePermissions(location, anyOf = true) { callback.invoke(origin, it, false) }
+            }
+        }
+        val decided = sitePermissions[key]
+        if (decided != null) {
+            respond(decided)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.perm_title)
+            .setMessage(getString(R.string.perm_message, UrlInput.displayHost(origin), getString(R.string.perm_location)))
+            .setPositiveButton(R.string.perm_allow) { _, _ ->
+                sitePermissions[key] = true
+                respond(true)
+            }
+            .setNegativeButton(R.string.perm_block) { _, _ ->
+                sitePermissions[key] = false
+                respond(false)
+            }
+            .setOnCancelListener { respond(false) }
+            .show()
+    }
+
+    private fun permissionKey(tab: Tab, origin: String, resource: String) = "${tab.isPrivate}|$origin|$resource"
+
+    private fun isLocalOrigin(origin: String): Boolean {
+        val host = UrlInput.hostOf(origin)
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+
+    /** Demande les autorisations Android manquantes, puis rappelle avec le résultat. */
+    private fun withRuntimePermissions(permissions: List<String>, anyOf: Boolean = false, then: (Boolean) -> Unit) {
+        val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isEmpty() || anyOf && missing.size < permissions.size) {
+            then(true)
+            return
+        }
+        pendingPermissions?.invoke(false)
+        pendingPermissions = then
+        permissionsAnyOf = anyOf
+        requestPermissions(missing.toTypedArray(), REQUEST_PERMISSIONS)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_PERMISSIONS) return
+        val callback = pendingPermissions ?: return
+        pendingPermissions = null
+        val results = grantResults.map { it == PackageManager.PERMISSION_GRANTED }
+        callback(results.isNotEmpty() && if (permissionsAnyOf) results.any { it } else results.all { it })
+    }
+
+    // ---------------------------------------------------------------- téléchargements
+
+    private fun onDownload(tab: Tab, url: String, userAgent: String?, disposition: String?, mime: String?, length: Long) {
+        if (!UrlInput.isHttp(url)) {
+            toast(R.string.download_unsupported)
+            return
+        }
+        val name = FileSafety.sanitize(URLUtil.guessFileName(url, disposition, mime))
+        val details = buildString {
+            append(getString(R.string.download_from, UrlInput.displayHost(url)))
+            FileSafety.formatSize(length)?.let { append(" · ").append(it) }
+            if (FileSafety.isDangerous(name)) append("\n\n").append(getString(R.string.download_danger))
+            if (tab.isPrivate) append("\n\n").append(getString(R.string.download_private_note))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setMessage(details)
+            .setPositiveButton(R.string.download_confirm) { _, _ -> startDownload(tab, url, userAgent, mime, name) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun startDownload(tab: Tab, url: String, userAgent: String?, mime: String?, name: String) {
+        if (Build.VERSION.SDK_INT < 29) {
+            val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                withRuntimePermissions(listOf(permission)) { if (it) startDownload(tab, url, userAgent, mime, name) }
+                return
+            }
+        }
+        try {
+            val request = DownloadManager.Request(Uri.parse(url))
+                .setTitle(name)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+            if (!mime.isNullOrBlank()) request.setMimeType(mime)
+            request.addRequestHeader("User-Agent", userAgent ?: userAgent(tab.desktopMode))
+            // Les cookies du bon profil (privé ou non) pour les fichiers derrière une connexion.
+            cookieManagerFor(tab).getCookie(url)?.let { request.addRequestHeader("Cookie", it) }
+            getSystemService(DownloadManager::class.java).enqueue(request)
+            Toast.makeText(this, getString(R.string.download_started, name), Toast.LENGTH_SHORT).show()
+        } catch (_: IllegalArgumentException) {
+            toast(R.string.download_unsupported)
+        } catch (_: IllegalStateException) {
+            toast(R.string.download_unsupported)
+        } catch (_: SecurityException) {
+            toast(R.string.download_unsupported)
+        }
+    }
+
+    // ---------------------------------------------------------------- navigation privée
+
+    /** Efface tout ce que le profil privé a pu conserver, puis supprime le profil s'il est libre. */
+    private fun clearPrivateData(atStartup: Boolean = false) {
+        if (!privateSupported) return
+        val store = ProfileStore.getInstance()
+        val profile = store.getProfile(PRIVATE_PROFILE) ?: return
+        sitePermissions.keys.removeAll { it.startsWith("true|") }
+        // Au démarrage, le moteur n'est pas encore initialisé : la suppression du profil suffit
+        // (aucune WebView ne l'utilise) et efface ses données sur le disque.
+        if (!atStartup) {
+            try {
+                profile.cookieManager.removeAllCookies(null)
+                profile.webStorage.deleteAllData()
+                profile.geolocationPermissions.clearAll()
+            } catch (_: RuntimeException) {
+                // Moteur indisponible : la suppression du profil ci-dessous reste tentée.
+            }
+        }
+        try {
+            store.deleteProfile(PRIVATE_PROFILE)
+        } catch (_: IllegalStateException) {
+            // Encore référencé par une WebView en cours de destruction : déjà vidé ci-dessus.
+        } catch (_: IllegalArgumentException) {
+            // Profil déjà supprimé.
+        }
     }
 
     internal fun showFileChooser(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
@@ -917,6 +1150,8 @@ class BrowserActivity : Activity() {
                 }
             }
 
+        const val PRIVATE_PROFILE = "zuri-prive"
+        const val REQUEST_PERMISSIONS = 2
         const val UNSAFE_ALLOW_MS = 10 * 60 * 1000L
         const val REQUEST_FILE = 1
         const val LOOP_WINDOW_MS = 15_000L

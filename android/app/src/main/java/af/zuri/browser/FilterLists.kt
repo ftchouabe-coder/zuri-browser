@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -39,6 +40,8 @@ class FilterLists(context: Context) {
         Thread(runnable, "zuri-filtres").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
     }
     private var retryScheduled = false
+    /** Ouvert dès que les listes de sécurité en cache sont chargées (premier démarrage compris). */
+    private val securityLoaded = CountDownLatch(1)
 
     fun start() {
         executor.execute {
@@ -47,7 +50,14 @@ class FilterLists(context: Context) {
         }
     }
 
-    fun threatFor(host: String, url: String): Threat? = when {
+    fun threatFor(host: String, url: String): Threat? {
+        // Au démarrage, une page ne doit pas passer avant le chargement des listes : on attend
+        // (fil réseau de la WebView, jamais l'interface), au plus quelques secondes.
+        if (securityLoaded.count > 0) securityLoaded.await(STARTUP_WAIT_S, TimeUnit.SECONDS)
+        return matchThreat(host, url)
+    }
+
+    private fun matchThreat(host: String, url: String): Threat? = when {
         phishing.matches(host, url) -> Threat.PHISHING
         malware.matches(host, url) -> Threat.MALWARE
         else -> null
@@ -79,6 +89,15 @@ class FilterLists(context: Context) {
     }
 
     private fun rebuild() {
+        // Sécurité d'abord (listes courtes), publicité ensuite (plusieurs Mo à analyser).
+        val phishingText = read("phishing.txt")
+        val malwareText = read("malware.txt")
+        phishing = phishingText?.let { DomainSet.Builder().addFilterList(it).build() } ?: DomainSet.EMPTY
+        malware = malwareText?.let { DomainSet.Builder().addFilterList(it).build() } ?: DomainSet.EMPTY
+        securityUpdatedAt = listOf("phishing.txt", "malware.txt")
+            .map { File(dir, it) }.filter { it.exists() }.minOfOrNull { it.lastModified() } ?: 0L
+        securityLoaded.countDown()
+
         val base = try {
             appContext.assets.open("base-filters.txt").bufferedReader().use { it.readText() }
         } catch (_: IOException) {
@@ -88,12 +107,6 @@ class FilterLists(context: Context) {
             read("easylist.txt")?.let(builder::addFilterList)
             read("easyprivacy.txt")?.let(builder::addFilterList)
         }.build()
-        val phishingText = read("phishing.txt")
-        val malwareText = read("malware.txt")
-        phishing = phishingText?.let { DomainSet.Builder().addFilterList(it).build() } ?: DomainSet.EMPTY
-        malware = malwareText?.let { DomainSet.Builder().addFilterList(it).build() } ?: DomainSet.EMPTY
-        securityUpdatedAt = listOf("phishing.txt", "malware.txt")
-            .map { File(dir, it) }.filter { it.exists() }.minOfOrNull { it.lastModified() } ?: 0L
         Log.i(TAG, "listes : pub ${ads.size}, phishing ${phishing.size}, malware ${malware.size}")
     }
 
@@ -160,6 +173,7 @@ class FilterLists(context: Context) {
         const val RETRY_MS = 10 * 60 * 1000L
         const val MAX_BYTES = 64L * 1024 * 1024
         const val MIN_BYTES = 256L
+        const val STARTUP_WAIT_S = 5L
 
         val LISTS = listOf(
             ListSpec("phishing.txt", 12 * HOUR, listOf(
