@@ -10,6 +10,7 @@ const { join } = require('node:path')
 const { tmpdir } = require('node:os')
 const { mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { FiltersEngine } = require('@ghostery/adblocker')
+const { ElectronBlocker } = require('@ghostery/adblocker-electron')
 
 const profile = join(tmpdir(), 'zuri-e2e-profile')
 const downloadsDir = join(tmpdir(), 'zuri-e2e-downloads')
@@ -23,6 +24,18 @@ const seedEngine = (file, rule) =>
   writeFileSync(join(profile, 'adblock', file), FiltersEngine.parse(rule, { loadCosmeticFilters: false }).serialize())
 seedEngine('phishing.bin', '/zuri-e2e-phish/*')
 seedEngine('malware.bin', '/zuri-e2e-malware/*')
+// Moteur anti-pub déterministe (liste de secours + règle cosmétique de test), mêmes options
+// que l'application : sans lui, chaque passage téléchargeait EasyList et le contrôle cosmétique
+// échouait tant que le téléchargement n'était pas terminé (test instable).
+writeFileSync(
+  join(profile, 'adblock', 'engine.bin'),
+  ElectronBlocker.parse(`${readFileSync(join(__dirname, '../resources/base-filters.txt'), 'utf8')}\n##.ad-slot`, {
+    enableCompression: true,
+    loadCosmeticFilters: true,
+    loadNetworkFilters: true,
+    enableMutationObserver: true
+  }).serialize()
+)
 
 // Ancien fichier de favoris en clair : doit être relu puis réécrit chiffré.
 mkdirSync(join(profile, 'data'), { recursive: true })
@@ -214,13 +227,20 @@ app.whenReady().then(async () => {
     // --- Filtrage cosmétique (préchargement adblocker-electron, règles dynamiques) -----
     await zuri('window.zuri.settings.update({ httpsOnly: false })')
     await tab.loadURL(`http://zuri-e2e.test:${port}/cosmetic`).catch(() => {})
-    await wait(2500)
+    // Attente active (jusqu'à 10 s) plutôt qu'un délai fixe : sur une machine chargée, le
+    // préchargement cosmétique arrive parfois après 2,5 s, ce qui rendait ce contrôle instable.
+    const readHidden = () =>
+      tab.executeJavaScript(`({
+        banner: getComputedStyle(document.getElementById('banner')).display,
+        dynamic: document.getElementById('late') ? getComputedStyle(document.getElementById('late')).display : 'absent',
+        content: getComputedStyle(document.getElementById('ok')).display
+      })`)
+    let hidden = await readHidden().catch(() => ({}))
+    for (let i = 0; i < 40 && !(hidden.banner === 'none' && hidden.dynamic === 'none'); i++) {
+      await wait(250)
+      hidden = await readHidden().catch(() => hidden)
+    }
     await zuri('window.zuri.settings.update({ httpsOnly: true })')
-    const hidden = await tab.executeJavaScript(`({
-      banner: getComputedStyle(document.getElementById('banner')).display,
-      dynamic: document.getElementById('late') ? getComputedStyle(document.getElementById('late')).display : 'absent',
-      content: getComputedStyle(document.getElementById('ok')).display
-    })`)
     check(
       'Emplacements publicitaires masqués (y compris ajoutés après coup)',
       hidden.banner === 'none' && hidden.dynamic === 'none' && hidden.content !== 'none',
