@@ -61,6 +61,8 @@ import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
+import java.text.NumberFormat
+import java.time.YearMonth
 import java.net.URISyntaxException
 import java.util.Locale
 
@@ -72,6 +74,7 @@ class BrowserActivity : Activity() {
         private set
     private val filters: FilterLists by lazy { sharedFilters(this) }
     private val library: Library by lazy { LibraryStore.shared(this) }
+    private val savings: SavingsCounter by lazy { sharedSavings(this) }
 
     private lateinit var root: View
     private lateinit var toolbar: View
@@ -179,6 +182,7 @@ class BrowserActivity : Activity() {
     override fun onPause() {
         super.onPause()
         saveSession()
+        persistSavings()
         current?.webView?.onPause()
         current?.webView?.pauseTimers()
         CookieManager.getInstance().flush()
@@ -475,6 +479,8 @@ class BrowserActivity : Activity() {
                 val until = tab.unsafeHosts[host]
                 if (until == null || until < SystemClock.elapsedRealtime()) {
                     tab.blocked.incrementAndGet()
+                savings.add(thisMonth())
+                    savings.add(thisMonth())
                     return if (request.isForMainFrame) threatResponse(tab, url, host, threat) else emptyResponse()
                 }
             }
@@ -483,6 +489,7 @@ class BrowserActivity : Activity() {
             val pageHost = UrlInput.hostOf(tab.pageUrl)
             if (pageHost == null || DomainSet.siteOf(pageHost) != DomainSet.siteOf(host)) {
                 tab.blocked.incrementAndGet()
+                savings.add(thisMonth())
                 return emptyResponse()
             }
         }
@@ -629,7 +636,7 @@ class BrowserActivity : Activity() {
     private fun showStartPage(tab: Tab) {
         val note = if (tab.isPrivate) getString(R.string.start_private) else null
         val title = getString(R.string.start_title)
-        renderPage(tab, null, title, Pages.start(getString(R.string.lang), title, getString(R.string.start_tagline), note))
+        renderPage(tab, null, title, Pages.start(getString(R.string.lang), title, getString(R.string.start_tagline), note, savingsSummary()))
         tab.title = ""
     }
 
@@ -791,6 +798,7 @@ class BrowserActivity : Activity() {
         }
         lines += getString(R.string.shield_blocked, tab.blocked.get())
         lines += getString(R.string.shield_popups, tab.popups.blocked)
+        savingsSummary()?.let { lines += it }
         val updated = filters.securityUpdatedAt
         lines += if (!settings.safeBrowsing) {
             getString(R.string.shield_lists_off)
@@ -804,6 +812,46 @@ class BrowserActivity : Activity() {
             .setMessage(lines.joinToString("\n\n"))
             .setPositiveButton(R.string.ok, null)
             .setNeutralButton(R.string.menu_settings) { _, _ -> showSettings() }
+            .setNegativeButton(R.string.savings_price_button) { _, _ -> askDataPrice() }
+            .show()
+    }
+
+    // ---------------------------------------------------------------- économies de données
+
+    private fun thisMonth(): String = YearMonth.now().toString()
+
+    /** « Ce mois-ci : 1 234 éléments bloqués, environ 18 Mo économisés (≈ 18 FCFA). » */
+    private fun savingsSummary(): String? {
+        val count = savings.snapshot(thisMonth()).second
+        if (count <= 0) return null
+        val locale = resources.configuration.locales[0]
+        val bytes = Savings.bytes(count)
+        val cost = Savings.formatCost(bytes, settings.dataPricePerGb, locale)?.let { getString(R.string.savings_cost, it) } ?: ""
+        return getString(R.string.savings_line, NumberFormat.getIntegerInstance(locale).format(count), Savings.formatSize(bytes, locale), cost)
+    }
+
+    private fun persistSavings() {
+        val (month, count) = savings.snapshot(thisMonth())
+        getSharedPreferences(SAVINGS_PREFS, MODE_PRIVATE).edit().putString("month", month).putLong("count", count).apply()
+    }
+
+    private fun askDataPrice() {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = getString(R.string.savings_price_hint)
+            if (settings.dataPricePerGb > 0) setText(settings.dataPricePerGb.toString())
+        }
+        val box = FrameLayout(this).apply { setPadding(pad, 0, pad, 0); addView(input) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.savings_price_title)
+            .setMessage(getString(R.string.savings_price_help, Savings.currencySymbol(resources.configuration.locales[0])))
+            .setView(box)
+            .setPositiveButton(R.string.ok) { _, _ ->
+                val price = input.text.toString().trim().toIntOrNull()?.coerceIn(0, 1_000_000) ?: 0
+                updateSettings(settings.copy(dataPricePerGb = price))
+            }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -1276,6 +1324,16 @@ class BrowserActivity : Activity() {
         @Volatile private var filterLists: FilterLists? = null
 
         /** Une seule instance par processus, partagée si l'activité est recréée. */
+        const val SAVINGS_PREFS = "economies"
+        @Volatile private var savingsCounter: SavingsCounter? = null
+
+        fun sharedSavings(activity: Activity): SavingsCounter =
+            savingsCounter ?: synchronized(this) {
+                savingsCounter ?: activity.getSharedPreferences(SAVINGS_PREFS, MODE_PRIVATE).let { prefs ->
+                    SavingsCounter(prefs.getString("month", "").orEmpty(), prefs.getLong("count", 0))
+                }.also { savingsCounter = it }
+            }
+
         fun sharedFilters(activity: Activity): FilterLists =
             filterLists ?: synchronized(this) {
                 filterLists ?: FilterLists(activity).also {

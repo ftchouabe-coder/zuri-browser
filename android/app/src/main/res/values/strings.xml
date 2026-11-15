@@ -112,4 +112,10 @@
     <string name="bookmark_added">Ajouté aux favoris</string>
     <string name="bookmark_removed">Retiré des favoris</string>
     <string name="delete">Supprimer</string>
+    <string name="savings_line">Ce mois-ci : %1$s éléments bloqués, environ %2$s de données économisées%3$s.</string>
+    <string name="savings_cost"> (≈ %1$s)</string>
+    <string name="savings_price_button">Prix des données</string>
+    <string name="savings_price_title">Prix d’1 Go de données</string>
+    <string name="savings_price_hint">Exemple : 1000</string>
+    <string name="savings_price_help">En %1$s, selon votre forfait. Sert uniquement à estimer vos économies, sur l’appareil. Laissez vide pour ne pas afficher de montant.</string>
 </resources>

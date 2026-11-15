@@ -50,12 +50,13 @@ object Pages {
         )
     }
 
-    fun start(lang: String, title: String, tagline: String, note: String?): String {
+    fun start(lang: String, title: String, tagline: String, note: String?, stats: String? = null): String {
         val noteHtml = note?.let { "<p class=\"note\">${escape(it)}</p>" } ?: ""
+        val statsHtml = stats?.let { "<p class=\"stats\">${escape(it)}</p>" } ?: ""
         return shell(
             lang, title, "#24325b",
             "<main class=\"start\"><div class=\"sun\" aria-hidden=\"true\"></div>" +
-                "<h1>Zuri</h1><p>${escape(tagline)}</p>$noteHtml</main>"
+                "<h1>Zuri</h1><p>${escape(tagline)}</p>$statsHtml$noteHtml</main>"
         )
     }
 
@@ -86,6 +87,7 @@ object Pages {
         .start h1{font-size:2.2rem;letter-spacing:.02em;margin-top:20px}
         .sun{width:72px;height:72px;margin:0 auto;border-radius:50%;background:#d9a05b;
           box-shadow:0 0 0 8px #efe6d6,0 0 0 13px #3f6b45}
+        .stats{margin-top:20px;color:var(--ink);font-weight:600}
         .note{margin-top:24px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px}
     """.trimIndent()
 }

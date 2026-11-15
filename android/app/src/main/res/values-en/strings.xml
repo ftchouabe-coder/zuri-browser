@@ -111,4 +111,10 @@
     <string name="bookmark_added">Added to bookmarks</string>
     <string name="bookmark_removed">Bookmark removed</string>
     <string name="delete">Delete</string>
+    <string name="savings_line">This month: %1$s items blocked, about %2$s of data saved%3$s.</string>
+    <string name="savings_cost"> (≈ %1$s)</string>
+    <string name="savings_price_button">Data price</string>
+    <string name="savings_price_title">Price of 1 GB of data</string>
+    <string name="savings_price_hint">Example: 1000</string>
+    <string name="savings_price_help">In %1$s, from your plan. Only used to estimate your savings, on the device. Leave empty to hide amounts.</string>
 </resources>

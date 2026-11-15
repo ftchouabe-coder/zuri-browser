@@ -11,7 +11,9 @@ data class Settings(
     val blockThirdPartyCookies: Boolean = true,
     val dataSaver: Boolean = false,
     val autoplay: Boolean = false,
-    val restoreSession: Boolean = true
+    val restoreSession: Boolean = true,
+    /** Prix d'1 Go de données mobiles, pour estimer les économies (0 = non renseigné). */
+    val dataPricePerGb: Int = 0
 )
 
 class Prefs(context: Context) {
@@ -25,7 +27,8 @@ class Prefs(context: Context) {
         blockThirdPartyCookies = prefs.getBoolean("blockThirdPartyCookies", true),
         dataSaver = prefs.getBoolean("dataSaver", false),
         autoplay = prefs.getBoolean("autoplay", false),
-        restoreSession = prefs.getBoolean("restoreSession", true)
+        restoreSession = prefs.getBoolean("restoreSession", true),
+        dataPricePerGb = prefs.getInt("dataPricePerGb", 0).coerceIn(0, 1_000_000)
     )
 
     fun save(s: Settings) {
@@ -38,6 +41,7 @@ class Prefs(context: Context) {
             .putBoolean("dataSaver", s.dataSaver)
             .putBoolean("autoplay", s.autoplay)
             .putBoolean("restoreSession", s.restoreSession)
+            .putInt("dataPricePerGb", s.dataPricePerGb)
             .apply()
     }
 
