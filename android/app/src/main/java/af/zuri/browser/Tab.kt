@@ -38,4 +38,7 @@ class Tab(val id: Int, val isPrivate: Boolean, val parentId: Int?, private val f
     var certErrorUrl: String? = null
     /** Hôtes signalés que l'utilisateur a choisi d'ouvrir malgré tout : hôte -> expiration. */
     val unsafeHosts = ConcurrentHashMap<String, Long>()
+    /** Scripts injectés en début de document, et la configuration qu'ils reflètent. */
+    var scripts: List<androidx.webkit.ScriptHandler> = emptyList()
+    var scriptKey = ""
 }

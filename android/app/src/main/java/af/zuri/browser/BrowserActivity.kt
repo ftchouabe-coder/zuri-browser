@@ -309,6 +309,7 @@ class BrowserActivity : Activity() {
         }
         webView.webViewClient = ZuriWebViewClient(this, tab)
         webView.webChromeClient = ZuriChromeClient(this, tab)
+        refreshScripts(tab, webView)
         return webView
     }
 
@@ -416,6 +417,7 @@ class BrowserActivity : Activity() {
         tab.internalPage = false
         tab.loadingUrl = target
         tab.url = target
+        refreshScripts(tab, tab.webView)
         tab.webView.loadUrl(target)
         render()
     }
@@ -816,6 +818,31 @@ class BrowserActivity : Activity() {
             .show()
     }
 
+    // ---------------------------------------------------------------- scripts de page
+
+    private var cosmeticCache: Pair<Int, String> = -1 to ""
+
+    /**
+     * (Ré)injecte les scripts de début de document si la configuration a changé : masquage des
+     * emplacements publicitaires et refus des cookies. Effet à partir du prochain chargement.
+     */
+    private fun refreshScripts(tab: Tab, webView: WebView) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        val hide = settings.adblock && settings.hideAdSlots
+        val version = filters.cosmeticVersion
+        val key = "$version|$hide|${settings.refuseCookies}"
+        if (key == tab.scriptKey) return
+        tab.scripts.forEach { it.remove() }
+        val scripts = mutableListOf<String>()
+        if (hide) {
+            if (cosmeticCache.first != version) cosmeticCache = version to PageScripts.cosmetic(filters.cosmetic)
+            cosmeticCache.second.takeIf { it.isNotEmpty() }?.let(scripts::add)
+        }
+        if (settings.refuseCookies) scripts += PageScripts.COOKIE_REFUSAL
+        tab.scripts = scripts.map { WebViewCompat.addDocumentStartJavaScript(webView, it, setOf("*")) }
+        tab.scriptKey = key
+    }
+
     // ---------------------------------------------------------------- économies de données
 
     private fun thisMonth(): String = YearMonth.now().toString()
@@ -864,16 +891,16 @@ class BrowserActivity : Activity() {
         val labels = arrayOf(
             getString(R.string.set_adblock), getString(R.string.set_safe), getString(R.string.set_https),
             getString(R.string.set_cookies), getString(R.string.set_datasaver), getString(R.string.set_autoplay),
-            getString(R.string.set_restore)
+            getString(R.string.set_restore), getString(R.string.set_cookie_refuse), getString(R.string.set_hide_slots)
         )
         val s = settings
-        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession)
+        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots)
         fun commit() {
             updateSettings(
                 settings.copy(
                     adblock = checked[0], safeBrowsing = checked[1], httpsOnly = checked[2],
                     blockThirdPartyCookies = checked[3], dataSaver = checked[4], autoplay = checked[5],
-                    restoreSession = checked[6]
+                    restoreSession = checked[6], refuseCookies = checked[7], hideAdSlots = checked[8]
                 )
             )
         }
@@ -904,6 +931,7 @@ class BrowserActivity : Activity() {
         settings = next
         prefs.save(next)
         tabs.forEach(::applySettings)
+        tabs.filter { it.hasWebView }.forEach { refreshScripts(it, it.webView) }
         saveSession()
     }
 

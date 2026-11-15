@@ -30,6 +30,12 @@ class FilterLists(context: Context) {
         private set
     @Volatile var malware: DomainSet = DomainSet.EMPTY
         private set
+    /** Sélecteurs génériques d'EasyList (`##…`) pour masquer les emplacements publicitaires. */
+    @Volatile var cosmetic: List<String> = emptyList()
+        private set
+    /** Incrémenté à chaque nouvelle liste cosmétique (les onglets réinjectent alors leur script). */
+    @Volatile var cosmeticVersion = 0
+        private set
     /** Instant de la dernière mise à jour des listes de sécurité (0 = jamais). */
     @Volatile var securityUpdatedAt = 0L
         private set
@@ -103,8 +109,16 @@ class FilterLists(context: Context) {
         } catch (_: IOException) {
             ""
         }
+        val easylist = read("easylist.txt")
+        cosmetic = easylist?.lineSequence()
+            ?.filter { it.startsWith("##") }
+            ?.map { it.substring(2).trim() }
+            ?.filter(PageScripts::isPlainSelector)
+            ?.take(PageScripts.MAX_SELECTORS)
+            ?.toList().orEmpty()
+        cosmeticVersion++
         ads = DomainSet.Builder().addFilterList(base).also { builder ->
-            read("easylist.txt")?.let(builder::addFilterList)
+            easylist?.let(builder::addFilterList)
             read("easyprivacy.txt")?.let(builder::addFilterList)
         }.build()
         Log.i(TAG, "listes : pub ${ads.size}, phishing ${phishing.size}, malware ${malware.size}")

@@ -117,4 +117,6 @@
     <string name="savings_price_title">Price of 1 GB of data</string>
     <string name="savings_price_hint">Example: 1000</string>
     <string name="savings_price_help">In %1$s, from your plan. Only used to estimate your savings, on the device. Leave empty to hide amounts.</string>
+    <string name="set_cookie_refuse">Automatically refuse cookie banners</string>
+    <string name="set_hide_slots">Hide empty ad slots</string>
 </resources>

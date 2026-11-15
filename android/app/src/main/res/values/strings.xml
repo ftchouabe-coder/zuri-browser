@@ -118,4 +118,6 @@
     <string name="savings_price_title">Prix d’1 Go de données</string>
     <string name="savings_price_hint">Exemple : 1000</string>
     <string name="savings_price_help">En %1$s, selon votre forfait. Sert uniquement à estimer vos économies, sur l’appareil. Laissez vide pour ne pas afficher de montant.</string>
+    <string name="set_cookie_refuse">Refuser automatiquement les bandeaux de cookies</string>
+    <string name="set_hide_slots">Masquer les emplacements publicitaires vides</string>
 </resources>
