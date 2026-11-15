@@ -58,6 +58,10 @@ Premier lancement : Zuri télécharge EasyList et EasyPrivacy, puis met les list
 
 Le test de fumée écrit une capture dans `%TEMP%\zuri-smoke.png` et vérifie la structure de l’interface, la navigation et l’état du bouclier réseau.
 
+## Android
+
+Le dossier [`android/`](android/README.md) contient une version Android native (Kotlin et WebView du système, APK d’environ 250 Ko, Android 8 ou plus récent). Elle offre les mêmes protections que la version de bureau quand Android le permet : HTTPS uniquement, anti-pub, anti-phishing et anti-malware vérifiés sur l’appareil, navigation privée isolée, autorisations demandées site par site. Voir [android/README.md](android/README.md) pour la compilation, la signature et l’installation.
+
 ## Structure
 
 ```

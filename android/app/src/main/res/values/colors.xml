@@ -2,16 +2,12 @@
 <!-- Palette « Terre & indigo », identique à la version de bureau. -->
 <resources>
     <color name="indigo">#24325B</color>
-    <color name="terracotta">#A8451F</color>
     <color name="acacia">#3F6B45</color>
-    <color name="gold">#D9A05B</color>
     <color name="surface">#FAF7F0</color>
     <color name="surface_2">#F2EAD9</color>
     <color name="ink">#1B1917</color>
     <color name="ink_soft">#6D6355</color>
     <color name="border">#DCD0BB</color>
-    <color name="accent">#24325B</color>
-    <color name="accent_ink">#FFFFFF</color>
     <color name="private_bar">#2F2A45</color>
     <color name="icon_background">#24325B</color>
 </resources>

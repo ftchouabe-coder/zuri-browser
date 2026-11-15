@@ -49,12 +49,12 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.ProfileStore
-import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
@@ -180,6 +180,8 @@ class BrowserActivity : Activity() {
         super.onDestroy()
     }
 
+    /** Android 8 à 12 seulement : à partir d'Android 13, le rappel enregistré ci-dessous est utilisé. */
+    @SuppressLint("GestureBackNavigation")
     @Deprecated("Remplacé par OnBackInvokedCallback à partir d'Android 13")
     override fun onBackPressed() {
         if (!handleBack()) moveTaskToBack(true)
@@ -282,7 +284,9 @@ class BrowserActivity : Activity() {
     private fun buildWebView(tab: Tab): WebView {
         val webView = WebView(this)
         // Onglet privé : profil WebView distinct (cookies, stockage, cache, autorisations).
-        if (tab.isPrivate) WebViewCompat.setProfile(webView, PRIVATE_PROFILE)
+        if (tab.isPrivate && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+            WebViewCompat.setProfile(webView, PRIVATE_PROFILE)
+        }
         configure(tab, webView)
         webView.setDownloadListener { url, agent, disposition, mime, length ->
             onDownload(tab, url, agent, disposition, mime, length)
@@ -307,10 +311,6 @@ class BrowserActivity : Activity() {
         s.loadWithOverviewMode = true
         s.useWideViewPort = true
         s.setGeolocationEnabled(true)
-        // Sans cela, chaque requête annonce le nom du paquet (X-Requested-With) aux sites.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
-            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(s, emptySet())
-        }
         applySettings(tab, webView)
     }
 
@@ -326,8 +326,11 @@ class BrowserActivity : Activity() {
     }
 
     private fun cookieManagerFor(tab: Tab): CookieManager =
-        if (tab.isPrivate) ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE).cookieManager
-        else CookieManager.getInstance()
+        if (tab.isPrivate && WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+            ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE).cookieManager
+        } else {
+            CookieManager.getInstance()
+        }
 
     /** Agent utilisateur de Chrome : sans le marqueur « wv », certains sites dégradent l'affichage. */
     private fun userAgent(desktop: Boolean): String {
@@ -1038,7 +1041,7 @@ class BrowserActivity : Activity() {
             }
         }
         try {
-            val request = DownloadManager.Request(Uri.parse(url))
+            val request = DownloadManager.Request(url.toUri())
                 .setTitle(name)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -1061,7 +1064,7 @@ class BrowserActivity : Activity() {
 
     /** Efface tout ce que le profil privé a pu conserver, puis supprime le profil s'il est libre. */
     private fun clearPrivateData(atStartup: Boolean = false) {
-        if (!privateSupported) return
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) return
         val store = ProfileStore.getInstance()
         val profile = store.getProfile(PRIVATE_PROFILE) ?: return
         sitePermissions.keys.removeAll { it.startsWith("true|") }

@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="indigo">#8FA3D6</color>
-    <color name="terracotta">#E0835B</color>
     <color name="acacia">#82BD8C</color>
     <color name="surface">#1F1B17</color>
     <color name="surface_2">#262119</color>
     <color name="ink">#F2EAD9</color>
     <color name="ink_soft">#A99C87</color>
     <color name="border">#3A3229</color>
-    <color name="accent">#8FA3D6</color>
-    <color name="accent_ink">#16130F</color>
     <color name="private_bar">#3A3357</color>
 </resources>

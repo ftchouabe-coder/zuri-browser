@@ -43,3 +43,23 @@ jobs:
 
       - name: Packaging (sans installeur)
         run: npx electron-builder --win --dir --publish never
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Tests unitaires et APK de débogage
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug lintDebug
