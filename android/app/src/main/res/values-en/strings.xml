@@ -159,4 +159,11 @@
     <string name="shortcut_private_long">New private tab</string>
     <string name="widget_label">Zuri search</string>
     <string name="widget_description">Search or open a private tab from the home screen.</string>
+    <string name="download_wait_wifi">Wait for Wi‑Fi</string>
+    <string name="download_waiting">Download waiting for Wi‑Fi: %1$s</string>
+    <string name="set_updates">Check for new versions (GitHub, weekly, on Wi‑Fi)</string>
+    <string name="update_title">Zuri %1$s is available</string>
+    <string name="update_message">A new version was published on the project’s official page. Download the APK from that page: Android only installs the update if it is signed with the same key as your current version.</string>
+    <string name="update_open">Open page</string>
+    <string name="update_later">Later</string>
 </resources>

@@ -85,6 +85,7 @@ class BrowserActivity : Activity() {
     private val filters: FilterLists by lazy { sharedFilters(this) }
     private val library: Library by lazy { LibraryStore.shared(this) }
     private val shelf: OfflineShelf by lazy { OfflineStore.shared(this) }
+    private val updates by lazy { UpdateChecker(this) }
     private val savings: SavingsCounter by lazy { sharedSavings(this) }
 
     private lateinit var root: View
@@ -182,6 +183,7 @@ class BrowserActivity : Activity() {
         registerBackHandler()
         filters // chargement des listes en tâche de fond
         watchNetwork()
+        updates.checkIfDue(settings.checkUpdates, metered, ::offerUpdate)
         // Reste d'une session privée interrompue (application tuée) : effacé avant tout.
         clearPrivateData(atStartup = true)
 
@@ -1007,17 +1009,17 @@ class BrowserActivity : Activity() {
             getString(R.string.set_adblock), getString(R.string.set_safe), getString(R.string.set_https),
             getString(R.string.set_cookies), getString(R.string.set_datasaver), getString(R.string.set_autoplay),
             getString(R.string.set_restore), getString(R.string.set_cookie_refuse), getString(R.string.set_hide_slots),
-            getString(R.string.set_darken), getString(R.string.set_lock_private)
+            getString(R.string.set_darken), getString(R.string.set_lock_private), getString(R.string.set_updates)
         )
         val s = settings
-        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots, s.darkenSites, s.lockPrivate)
+        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots, s.darkenSites, s.lockPrivate, s.checkUpdates)
         fun commit() {
             updateSettings(
                 settings.copy(
                     adblock = checked[0], safeBrowsing = checked[1], httpsOnly = checked[2],
                     blockThirdPartyCookies = checked[3], dataSaver = checked[4], autoplay = checked[5],
                     restoreSession = checked[6], refuseCookies = checked[7], hideAdSlots = checked[8],
-                    darkenSites = checked[9], lockPrivate = checked[10]
+                    darkenSites = checked[9], lockPrivate = checked[10], checkUpdates = checked[11]
                 )
             )
         }
@@ -1279,6 +1281,18 @@ class BrowserActivity : Activity() {
                 startActivityForResult(intent, REQUEST_UNLOCK)
             }
         }
+    }
+
+    // ---------------------------------------------------------------- nouvelles versions
+
+    private fun offerUpdate(update: UpdateChecker.Update) {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.update_title, update.version.removePrefix("v")))
+            .setMessage(R.string.update_message)
+            .setPositiveButton(R.string.update_open) { _, _ -> createTab(update.page, private = false) }
+            .setNegativeButton(R.string.update_later) { _, _ -> updates.dismiss(update.version) }
+            .show()
     }
 
     // ---------------------------------------------------------------- économiseur de données
@@ -1652,19 +1666,21 @@ class BrowserActivity : Activity() {
             if (FileSafety.isDangerous(name)) append("\n\n").append(getString(R.string.download_danger))
             if (tab.isPrivate) append("\n\n").append(getString(R.string.download_private_note))
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(name)
             .setMessage(details)
             .setPositiveButton(R.string.download_confirm) { _, _ -> startDownload(tab, url, userAgent, mime, name) }
             .setNegativeButton(R.string.cancel, null)
-            .show()
+        // Données mobiles : le fichier peut attendre le Wi-Fi (DownloadManager s'en charge).
+        if (metered) dialog.setNeutralButton(R.string.download_wait_wifi) { _, _ -> startDownload(tab, url, userAgent, mime, name, wifiOnly = true) }
+        dialog.show()
     }
 
-    private fun startDownload(tab: Tab, url: String, userAgent: String?, mime: String?, name: String) {
+    private fun startDownload(tab: Tab, url: String, userAgent: String?, mime: String?, name: String, wifiOnly: Boolean = false) {
         if (Build.VERSION.SDK_INT < 29) {
             val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-                withRuntimePermissions(listOf(permission)) { if (it) startDownload(tab, url, userAgent, mime, name) }
+                withRuntimePermissions(listOf(permission)) { if (it) startDownload(tab, url, userAgent, mime, name, wifiOnly) }
                 return
             }
         }
@@ -1674,11 +1690,12 @@ class BrowserActivity : Activity() {
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
             if (!mime.isNullOrBlank()) request.setMimeType(mime)
+            if (wifiOnly) request.setAllowedOverMetered(false)
             request.addRequestHeader("User-Agent", userAgent ?: userAgent(tab.desktopMode))
             // Les cookies du bon profil (privé ou non) pour les fichiers derrière une connexion.
             cookieManagerFor(tab).getCookie(url)?.let { request.addRequestHeader("Cookie", it) }
             getSystemService(DownloadManager::class.java).enqueue(request)
-            Toast.makeText(this, getString(R.string.download_started, name), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(if (wifiOnly) R.string.download_waiting else R.string.download_started, name), Toast.LENGTH_SHORT).show()
         } catch (_: IllegalArgumentException) {
             toast(R.string.download_unsupported)
         } catch (_: IllegalStateException) {

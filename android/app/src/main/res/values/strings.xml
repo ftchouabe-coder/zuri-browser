@@ -160,4 +160,11 @@
     <string name="shortcut_private_long">Nouvel onglet privé</string>
     <string name="widget_label">Recherche Zuri</string>
     <string name="widget_description">Rechercher ou ouvrir un onglet privé depuis l’écran d’accueil.</string>
+    <string name="download_wait_wifi">Attendre le Wi‑Fi</string>
+    <string name="download_waiting">Téléchargement en attente du Wi‑Fi : %1$s</string>
+    <string name="set_updates">Vérifier les nouvelles versions (GitHub, 1 fois par semaine, en Wi‑Fi)</string>
+    <string name="update_title">Zuri %1$s est disponible</string>
+    <string name="update_message">Une nouvelle version a été publiée sur la page officielle du projet. Téléchargez l’APK depuis cette page : Android n’installera la mise à jour que si elle est signée par la même clé que votre version actuelle.</string>
+    <string name="update_open">Ouvrir la page</string>
+    <string name="update_later">Plus tard</string>
 </resources>

@@ -19,6 +19,7 @@ data class Settings(
     val darkenSites: Boolean = true,
     /** Empreinte ou code du téléphone pour revenir sur un onglet privé. */
     val lockPrivate: Boolean = false,
+    val checkUpdates: Boolean = true,
     /** Prix d'1 Go de données mobiles, pour estimer les économies (0 = non renseigné). */
     val dataPricePerGb: Int = 0
 )
@@ -39,6 +40,7 @@ class Prefs(context: Context) {
         hideAdSlots = prefs.getBoolean("hideAdSlots", true),
         darkenSites = prefs.getBoolean("darkenSites", true),
         lockPrivate = prefs.getBoolean("lockPrivate", false),
+        checkUpdates = prefs.getBoolean("checkUpdates", true),
         dataPricePerGb = prefs.getInt("dataPricePerGb", 0).coerceIn(0, 1_000_000)
     )
 
@@ -56,6 +58,7 @@ class Prefs(context: Context) {
             .putBoolean("hideAdSlots", s.hideAdSlots)
             .putBoolean("darkenSites", s.darkenSites)
             .putBoolean("lockPrivate", s.lockPrivate)
+            .putBoolean("checkUpdates", s.checkUpdates)
             .putInt("dataPricePerGb", s.dataPricePerGb)
             .apply()
     }
