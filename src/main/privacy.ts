@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { FiltersEngine, Request, type RequestType } from '@ghostery/adblocker'
 import { ElectronBlocker } from '@ghostery/adblocker-electron'
 import { isThirdParty } from './cookie-policy'
+import { checkLookalike } from './lookalike'
 import { getSettings } from './settings'
 
 /**
@@ -111,7 +112,22 @@ const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i
 const COSMETIC_CHANNEL = '@ghostery/adblocker/inject-cosmetic-filters'
 const MUTATION_CHANNEL = '@ghostery/adblocker/is-mutation-observer-enabled'
 
-export type ThreatKind = 'phishing' | 'malware'
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
+  }
+}
+
+export type ThreatKind = 'phishing' | 'malware' | 'lookalike'
+
+/** Menace bloquée ; pour une imitation de marque, la marque et ses domaines officiels. */
+export interface ThreatInfo {
+  kind: ThreatKind
+  brand?: string
+  example?: string
+}
 
 interface RequestLike {
   url: string
@@ -248,7 +264,7 @@ export class PrivacyShield {
   /** Sites signalés que l'utilisateur a choisi d'ouvrir : clé `${webContentsId}|${hôte}`. */
   private allowUnsafe = new Map<string, number>()
   /** Dernière menace bloquée par onglet, lue pour afficher la page d'avertissement. */
-  private pendingThreats = new Map<number, { url: string; kind: ThreatKind }>()
+  private pendingThreats = new Map<number, ThreatInfo & { url: string }>()
   private installed = new WeakSet<Session>()
   private ipcReady = false
   private refreshTimer: NodeJS.Timeout | null = null
@@ -364,11 +380,11 @@ export class PrivacyShield {
   }
 
   /** Menace bloquée pour cet onglet et cette URL (consommée par la page d'avertissement). */
-  takeThreat(webContentsId: number, url: string): ThreatKind | null {
+  takeThreat(webContentsId: number, url: string): ThreatInfo | null {
     const threat = this.pendingThreats.get(webContentsId)
     if (!threat || threat.url !== url) return null
     this.pendingThreats.delete(webContentsId)
-    return threat.kind
+    return { kind: threat.kind, brand: threat.brand, example: threat.example }
   }
 
   private isUnsafeAllowed(webContentsId: number | undefined, url: string): boolean {
@@ -423,6 +439,19 @@ export class PrivacyShield {
           }
         } catch {
           /* une règle qui échoue ne doit jamais bloquer la navigation */
+        }
+        // Faux site de mobile money ou de banque : nom d'hôte imitant une marque connue.
+        if (details.resourceType === 'mainFrame' && typeof details.webContentsId === 'number') {
+          const match = checkLookalike(hostOf(url))
+          if (match) {
+            this.pendingThreats.set(details.webContentsId, {
+              url,
+              kind: 'lookalike',
+              brand: match.brand.name,
+              example: match.brand.example
+            })
+            return callback({ cancel: true })
+          }
         }
       }
 

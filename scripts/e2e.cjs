@@ -197,6 +197,20 @@ app.whenReady().then(async () => {
     await wait(600)
     check('Lien d’action forgé par une page ignoré', tab.getURL().endsWith('/zuri-e2e-malware/setup'), tab.getURL())
 
+    // --- Faux site de mobile money (bloqué avant toute requête réseau) ------------------
+    await tab.loadURL('http://orange-money-bonus.xyz/login').catch(() => {})
+    await wait(1500)
+    const lookalikeUrl = decodeURIComponent(tab.getURL())
+    const lookalike = await tab.executeJavaScript(`({
+      title: document.querySelector('h1')?.textContent ?? '',
+      proceed: Boolean(document.querySelector('a[href^="zuri://action/proceed-unsafe"]'))
+    })`)
+    check(
+      'Imitation d’Orange Money signalée',
+      lookalikeUrl.includes('threat=lookalike') && lookalike.title.includes('Orange Money') && lookalike.proceed,
+      { url: lookalikeUrl.slice(0, 90), lookalike }
+    )
+
     // --- Filtrage cosmétique (préchargement adblocker-electron, règles dynamiques) -----
     await zuri('window.zuri.settings.update({ httpsOnly: false })')
     await tab.loadURL(`http://zuri-e2e.test:${port}/cosmetic`).catch(() => {})

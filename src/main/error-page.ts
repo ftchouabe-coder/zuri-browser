@@ -49,8 +49,11 @@ const TOKEN_RE = /^[0-9a-f-]{36}$/i
 
 /** Site signalé par les listes de sécurité, avec le jeton du lien « Continuer quand même ». */
 export interface ThreatPage {
-  kind: 'phishing' | 'malware'
+  kind: 'phishing' | 'malware' | 'lookalike'
   token: string
+  /** Imitation de marque : marque imitée et exemples de domaines officiels. */
+  brand?: string
+  example?: string
 }
 
 const THREAT_TEXT = {
@@ -166,8 +169,30 @@ export function errorPage(
 </html>`
 }
 
+function lookalikeText(threat: ThreatPage, url: string, fr: boolean): { label: string; title: string; body: string } {
+  const brand = threat.brand || (fr ? 'un service connu' : 'a well-known service')
+  let host = url
+  try {
+    host = new URL(url).hostname
+  } catch {
+    /* URL affichée telle quelle (échappée plus bas) */
+  }
+  const official = threat.example ? (fr ? ` Sites officiels : ${threat.example}` : ` Official sites: ${threat.example}`) : ''
+  return fr
+    ? {
+        label: 'Imitation de marque',
+        title: `Ce site imite peut-être ${brand}`,
+        body: `${host} n’appartient pas à ${brand}. Ce genre de faux site sert à voler les codes PIN, mots de passe et numéros de compte : ne saisissez rien ici.${official}`
+      }
+    : {
+        label: 'Brand imitation',
+        title: `This site may be imitating ${brand}`,
+        body: `${host} does not belong to ${brand}. Fake sites like this are used to steal PIN codes, passwords and account numbers: do not enter anything here.${official}`
+      }
+}
+
 function threatContent(url: string, threat: ThreatPage, fr: boolean): string {
-  const text = THREAT_TEXT[threat.kind][fr ? 'fr' : 'en']
+  const text = threat.kind === 'lookalike' ? lookalikeText(threat, url, fr) : THREAT_TEXT[threat.kind][fr ? 'fr' : 'en']
   const proceed = TOKEN_RE.test(threat.token)
     ? `<a class="link" href="zuri://action/proceed-unsafe?t=${encodeURIComponent(threat.token)}">${
         fr ? 'Ignorer l’avertissement et continuer' : 'Ignore the warning and continue'

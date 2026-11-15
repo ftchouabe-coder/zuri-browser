@@ -75,4 +75,17 @@ describe('PAGE_HEADERS', () => {
     expect(csp).toContain("script-src 'none'")
     expect(csp).toContain("frame-ancestors 'none'")
   })
+
+  it('affiche une imitation de marque sans rien injecter', () => {
+    const html = errorPage('https://orange-money-bonus.xyz/login', -20, '', '', fr, {
+      kind: 'lookalike',
+      token: TOKEN,
+      brand: 'Orange <b>Money</b>',
+      example: 'orange.cm"><script>x</script>'
+    })
+    expect(html).toContain('Ce site imite peut-être Orange &lt;b&gt;Money&lt;/b&gt;')
+    expect(html).toContain('orange-money-bonus.xyz n’appartient pas')
+    expect(html).not.toMatch(/<script/i)
+    expect(html).toContain('proceed-unsafe?t=' + TOKEN)
+  })
 })

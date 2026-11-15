@@ -24,7 +24,15 @@ function handleZuriRequest(request: Request): Response {
   const description = (parsed.searchParams.get('desc') ?? '').slice(0, 300)
   const token = parsed.searchParams.get('t') ?? ''
   const kind = parsed.searchParams.get('threat')
-  const threat: ThreatPage | null = kind === 'phishing' || kind === 'malware' ? { kind, token } : null
+  const threat: ThreatPage | null =
+    kind === 'phishing' || kind === 'malware' || kind === 'lookalike'
+      ? {
+          kind,
+          token,
+          brand: (parsed.searchParams.get('brand') ?? '').slice(0, 60),
+          example: (parsed.searchParams.get('example') ?? '').slice(0, 120)
+        }
+      : null
 
   return new Response(errorPage(url, code, description, threat ? '' : token, settings, threat), {
     headers: PAGE_HEADERS

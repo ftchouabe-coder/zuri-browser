@@ -24,6 +24,7 @@
 - Favoris, historique, téléchargements, panneaux de gestion.
 - Bouclier réseau : anti-pub/anti-trace (`@ghostery/adblocker-electron`), filtrage cosmétique dynamique et scriptlets, économie de données, HTTPS-only avec possibilité de continuer en HTTP ponctuellement.
 - Protection anti-phishing et anti-malware : les sites signalés sont bloqués avant chargement, avec une page d’avertissement. Les listes sont vérifiées **sur votre appareil**, aucune adresse visitée n’est transmise.
+- Faux sites de mobile money et de banque : un nom de domaine qui imite Orange Money, MTN MoMo, Wave, M-Pesa, Ecobank, Western Union, PayPal… (`orange-money-bonus.xyz`, `0range-money.com`, lettres cyrilliques) déclenche un avertissement avant le chargement, même si le site est trop récent pour figurer dans les listes publiques.
 - Fenêtres surgissantes ouvertes en onglet en gardant le lien avec la page d’origine (connexions Google, Microsoft, paiements…), rafales bloquées et signalées dans la barre d’adresse.
 - Permissions sensibles (caméra, micro, géolocalisation, notifications, presse-papiers, MIDI) demandées à l’origine, mémorisées localement, réinitialisables.
 - Effacement des données (historique, cookies, cache, tout) et effacement à la fermeture en option.

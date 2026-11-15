@@ -14,7 +14,7 @@ import { addBookmark } from './bookmarks'
 import { loadFavicon } from './favicons'
 import { tr } from './i18n'
 import { recordVisit, updateTitle } from './history'
-import { privacyShield, type ThreatKind } from './privacy'
+import { privacyShield, type ThreatInfo } from './privacy'
 import { isHttpUrl, resolveInput } from './search'
 import { getSettings } from './settings'
 import { clearPrivateSession, MAIN_PARTITION, PRIVATE_PARTITION } from './sessions'
@@ -342,7 +342,7 @@ export class TabManager {
     url: string,
     code: number,
     description: string,
-    threat: ThreatKind | null = null
+    threat: ThreatInfo | null = null
   ): void {
     if (tab.view.webContents.isDestroyed()) return
     const params = new URLSearchParams({
@@ -363,7 +363,9 @@ export class TabManager {
         kind: 'unsafe',
         expires: Date.now() + INSECURE_TOKEN_TTL_MS
       })
-      params.set('threat', threat)
+      params.set('threat', threat.kind)
+      if (threat.brand) params.set('brand', threat.brand)
+      if (threat.example) params.set('example', threat.example)
       params.set('t', token)
     } else if (/^https:\/\//i.test(url)) {
       const token = randomUUID()
