@@ -22,14 +22,20 @@ la version de bureau quand Android le permet.
 | Téléchargements | Confirmation avant chaque téléchargement, avec une alerte renforcée pour les APK et exécutables. |
 | Fenêtres surgissantes | Seulement après un geste de l'utilisateur, avec une limite de fréquence. Elles s'ouvrent en onglet en gardant le lien avec la page d'origine. |
 | Données mobiles | Listes mises à jour seulement si elles ont changé (ETag), économiseur de données sans images. |
+| Données économisées | Compteur mensuel sur la page d'accueil et dans le bouclier (« 1 234 éléments bloqués, environ 18 Mo économisés »). Estimation prudente de 15 Ko par élément bloqué. Le montant (en FCFA, par exemple) ne s'affiche que si vous indiquez le prix d'1 Go de votre forfait. |
+| Faux sites mobile money | Les noms de domaine qui imitent Orange Money, MTN MoMo, Wave, Moov, Airtel, M-Pesa, Ecobank, Western Union, PayPal… déclenchent un avertissement avant le chargement de la page. Les caractères trompeurs (`0range`, `rn`→`m`, lettres cyrilliques) sont neutralisés. La vérification se fait sur le téléphone. |
+| Cookies et emplacements vides | Les bandeaux de consentement de 23 outils courants sont refusés automatiquement : clic sur « Refuser », jamais sur « Accepter ». Les emplacements publicitaires vides sont masqués (règles génériques d'EasyList). |
+| Favoris et historique | Chiffrés sur le téléphone (AES-256-GCM, clé du Keystore Android), jamais alimentés par les onglets privés. Les suggestions de la barre d'adresse sont calculées sur l'appareil : rien n'est envoyé au moteur pendant la saisie. |
 
 Aucune donnée n'est sauvegardée dans le cloud et aucune statistique n'est envoyée.
 
 ## Différences avec la version de bureau
 
-- Le filtrage cosmétique (masquer les emplacements vides) et les scriptlets ne sont pas
-  disponibles. La WebView ne permet pas de les appliquer proprement : seules les requêtes sont
-  bloquées.
+- Le masquage des emplacements publicitaires utilise seulement les règles génériques
+  d'EasyList, dans la page principale. Les règles propres à un site et les scriptlets ne sont
+  pas appliqués.
+- Les bandeaux de cookies sur les sites « payer ou accepter », comme Le Monde, ne sont pas
+  contournés : ils n'offrent pas de bouton « Refuser ».
 - La protection anti-phishing de la WebView repose sur Google Safe Browsing. Ce service ne
   transmet que des préfixes de hachage, et seulement en cas de correspondance. Il peut être
   désactivé dans les réglages, en même temps que les listes locales.
@@ -67,8 +73,12 @@ les téléphones accepteront par-dessus la version déjà installée.
 
 ## Tests
 
-- `./gradlew testDebugUnitTest` : 15 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
-  jetons des pages internes, échappement HTML, noms de fichiers).
+- `./gradlew testDebugUnitTest` : 28 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
+  jetons des pages internes, échappement HTML, noms de fichiers, favoris et suggestions, compteur
+  de données, scripts de page, faux sites mobile money).
+- Sprint du 15/11/2026, vérifié sur le même téléphone : avertissement sur
+  `orange-money-bonus.xyz`, bandeau de Jeune Afrique refusé automatiquement dans un profil vierge,
+  compteur affiché sur la page d'accueil, favori proposé dès « doua » dans la barre d'adresse.
 - Vérifié à la main le 15/11/2026 sur un TECNO CG8h (Android 11, WebView 153), APK release :
   démarrage en 1 s, passage en HTTPS, listes téléchargées puis 7 traqueurs bloqués sur un site
   d'actualité avant tout consentement, onglet privé (captures refusées, fermeture propre),
