@@ -139,4 +139,10 @@
     <string name="tts_unavailable">La synthèse vocale n’est pas disponible sur ce téléphone.</string>
     <string name="tts_voice_missing">Voix non installée pour cette langue : lecture avec la voix par défaut.</string>
     <string name="tts_started">Lecture à voix haute…</string>
+    <string name="menu_offline_save">Enregistrer pour lire hors ligne</string>
+    <string name="menu_offline_list">Lecture hors ligne</string>
+    <string name="offline_saved">Article enregistré : lisible sans connexion.</string>
+    <string name="offline_private">Rien n’est enregistré depuis un onglet privé.</string>
+    <string name="offline_empty">Aucun article enregistré. Sur une page, choisissez « Enregistrer pour lire hors ligne » dans le menu.</string>
+    <string name="offline_note">Version enregistrée le %1$s, lisible sans connexion.</string>
 </resources>

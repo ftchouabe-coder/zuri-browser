@@ -138,4 +138,10 @@
     <string name="tts_unavailable">Text-to-speech is not available on this phone.</string>
     <string name="tts_voice_missing">No voice installed for this language: reading with the default voice.</string>
     <string name="tts_started">Reading aloud…</string>
+    <string name="menu_offline_save">Save for offline reading</string>
+    <string name="menu_offline_list">Offline reading</string>
+    <string name="offline_saved">Article saved: readable without a connection.</string>
+    <string name="offline_private">Nothing is saved from a private tab.</string>
+    <string name="offline_empty">No saved articles. On a page, choose “Save for offline reading” in the menu.</string>
+    <string name="offline_note">Version saved on %1$s, readable without a connection.</string>
 </resources>

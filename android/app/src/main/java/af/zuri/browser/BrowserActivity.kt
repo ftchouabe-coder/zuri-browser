@@ -81,6 +81,7 @@ class BrowserActivity : Activity() {
         private set
     private val filters: FilterLists by lazy { sharedFilters(this) }
     private val library: Library by lazy { LibraryStore.shared(this) }
+    private val shelf: OfflineShelf by lazy { OfflineStore.shared(this) }
     private val savings: SavingsCounter by lazy { sharedSavings(this) }
 
     private lateinit var root: View
@@ -830,6 +831,10 @@ class BrowserActivity : Activity() {
         }
         if (speaking) menu.add(0, M_SPEAK_STOP, 5, R.string.menu_speak_stop)
         else if (UrlInput.isHttp(tab.url) && (!tab.internalPage || tab.article != null)) menu.add(0, M_SPEAK, 5, R.string.menu_speak)
+        if (!tab.isPrivate && UrlInput.isHttp(tab.url) && (!tab.internalPage || tab.article != null)) {
+            menu.add(0, M_OFFLINE_SAVE, 6, R.string.menu_offline_save)
+        }
+        menu.add(0, M_OFFLINE_LIST, 6, R.string.menu_offline_list)
         menu.add(0, M_BOOKMARKS, 6, R.string.menu_bookmarks)
         menu.add(0, M_HISTORY, 6, R.string.menu_history)
         menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
@@ -850,6 +855,8 @@ class BrowserActivity : Activity() {
                 M_CLOSE_PRIVATE -> tabs.filter { it.isPrivate }.forEach(::closeTab)
                 M_FIND -> showFind()
                 M_READER -> openReader(tab)
+                M_OFFLINE_SAVE -> saveOffline(tab)
+                M_OFFLINE_LIST -> showOffline()
                 M_SPEAK -> speak(tab)
                 M_SPEAK_STOP -> stopSpeech()
                 M_BOOKMARK -> toggleBookmark(tab)
@@ -1205,7 +1212,8 @@ class BrowserActivity : Activity() {
         emptyRes: Int,
         load: () -> List<Pair<String, String>>,
         remove: (String) -> Unit,
-        neutral: Pair<Int, () -> Unit>? = null
+        neutral: Pair<Int, () -> Unit>? = null,
+        open: (String) -> Unit = { url -> current?.let { load(it, url) } }
     ) {
         var entries = load()
         if (entries.isEmpty()) {
@@ -1234,11 +1242,41 @@ class BrowserActivity : Activity() {
         }
         val builder = AlertDialog.Builder(this)
             .setTitle(titleRes)
-            .setAdapter(adapter) { _, which -> entries.getOrNull(which)?.let { (url, _) -> current?.let { load(it, url) } } }
+            .setAdapter(adapter) { _, which -> entries.getOrNull(which)?.let { (url, _) -> open(url) } }
             .setPositiveButton(R.string.ok, null)
         neutral?.let { (label, action) -> builder.setNeutralButton(label) { _, _ -> action() } }
         builder.show()
     }
+
+    private fun saveOffline(tab: Tab) {
+        if (tab.isPrivate) {
+            toast(R.string.offline_private)
+            return
+        }
+        extractArticle(tab) { article ->
+            if (article == null) {
+                toast(R.string.reader_unavailable)
+            } else {
+                tab.article = article
+                shelf.save(article.copy(savedAt = System.currentTimeMillis()))
+                toast(R.string.offline_saved)
+            }
+        }
+    }
+
+    private fun showOffline() = showEntries(
+        R.string.menu_offline_list, R.string.offline_empty,
+        { shelf.list().map { it.url to it.title } }, shelf::remove,
+        open = { url ->
+            val tab = current
+            val article = shelf.get(url)
+            if (tab != null && article != null) {
+                val date = DateUtils.formatDateTime(this, article.savedAt, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR)
+                tab.article = article
+                renderPage(tab, article.url, article.title, Reader.html(article, readerLabels(getString(R.string.offline_note, date))))
+            }
+        }
+    )
 
     private fun showBookmarks() = showEntries(
         R.string.menu_bookmarks, R.string.bookmarks_empty,
@@ -1618,5 +1656,7 @@ class BrowserActivity : Activity() {
         const val M_READER = 15
         const val M_SPEAK = 16
         const val M_SPEAK_STOP = 17
+        const val M_OFFLINE_SAVE = 18
+        const val M_OFFLINE_LIST = 19
     }
 }
