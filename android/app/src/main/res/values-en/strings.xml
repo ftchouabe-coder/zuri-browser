@@ -123,4 +123,10 @@
     <string name="lookalike_message">%1$s does not belong to %2$s. Fake sites like this are used to steal PIN codes, passwords and account numbers: do not enter anything here.</string>
     <string name="lookalike_detail">Checked on your device. Official sites: %1$s</string>
     <string name="lookalike_proceed">I know this site, continue</string>
+    <string name="find_hint">Find in page</string>
+    <string name="find_prev">Previous match</string>
+    <string name="find_next">Next match</string>
+    <string name="find_close">Close search</string>
+    <string name="menu_find">Find in page</string>
+    <string name="set_darken">Darken websites in dark mode</string>
 </resources>

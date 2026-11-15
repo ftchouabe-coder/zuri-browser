@@ -124,4 +124,10 @@
     <string name="lookalike_message">%1$s n’appartient pas à %2$s. Ce genre de faux site sert à voler les codes PIN, mots de passe et numéros de compte : ne saisissez rien ici.</string>
     <string name="lookalike_detail">Vérification faite sur votre appareil. Sites officiels : %1$s</string>
     <string name="lookalike_proceed">Je connais ce site, continuer</string>
+    <string name="find_hint">Rechercher dans la page</string>
+    <string name="find_prev">Occurrence précédente</string>
+    <string name="find_next">Occurrence suivante</string>
+    <string name="find_close">Fermer la recherche</string>
+    <string name="menu_find">Rechercher dans la page</string>
+    <string name="set_darken">Assombrir les sites en mode sombre</string>
 </resources>

@@ -18,7 +18,9 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Message
 import android.os.SystemClock
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.text.format.DateUtils
 import android.view.KeyEvent
 import android.view.View
@@ -58,6 +60,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.ProfileStore
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
@@ -84,6 +87,9 @@ class BrowserActivity : Activity() {
     private lateinit var shieldButton: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var content: FrameLayout
+    private lateinit var findBar: View
+    private lateinit var findInput: EditText
+    private lateinit var findCount: TextView
 
     private val tabs = mutableListOf<Tab>()
     private var current: Tab? = null
@@ -118,6 +124,10 @@ class BrowserActivity : Activity() {
         shieldButton = findViewById(R.id.shield)
         progress = findViewById(R.id.progress)
         content = findViewById(R.id.content)
+        findBar = findViewById(R.id.find_bar)
+        findInput = findViewById(R.id.find_input)
+        findCount = findViewById(R.id.find_count)
+        setupFindBar()
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
@@ -304,6 +314,9 @@ class BrowserActivity : Activity() {
             WebViewCompat.setProfile(webView, PRIVATE_PROFILE)
         }
         configure(tab, webView)
+        webView.setFindListener { active, total, _ ->
+            if (tab === current) findCount.text = if (total == 0) "0/0" else "${active + 1}/$total"
+        }
         webView.setDownloadListener { url, agent, disposition, mime, length ->
             onDownload(tab, url, agent, disposition, mime, length)
         }
@@ -339,6 +352,10 @@ class BrowserActivity : Activity() {
         s.mediaPlaybackRequiresUserGesture = !settings.autoplay
         s.blockNetworkImage = settings.dataSaver
         s.userAgentString = userAgent(tab.desktopMode)
+        // Mode sombre du téléphone : les sites sans thème sombre sont assombris par le moteur.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, settings.darkenSites)
+        }
         cookieManagerFor(tab).setAcceptThirdPartyCookies(webView, !settings.blockThirdPartyCookies)
     }
 
@@ -359,6 +376,7 @@ class BrowserActivity : Activity() {
 
     private fun selectTab(tab: Tab) {
         val previous = current
+        if (previous !== tab && findBar.visibility == View.VISIBLE) hideFind()
         if (previous != null && previous !== tab && previous.hasWebView) {
             previous.webView.onPause()
             content.removeView(previous.webView)
@@ -576,6 +594,10 @@ class BrowserActivity : Activity() {
     private fun handleBack(): Boolean {
         if (customView != null) {
             hideCustomView()
+            return true
+        }
+        if (findBar.visibility == View.VISIBLE) {
+            hideFind()
             return true
         }
         if (address.hasFocus()) {
@@ -796,6 +818,7 @@ class BrowserActivity : Activity() {
             val marked = library.isBookmarked(tab.url)
             menu.add(0, M_BOOKMARK, 6, if (marked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
         }
+        if (UrlInput.isHttp(tab.url) && !tab.internalPage) menu.add(0, M_FIND, 5, R.string.menu_find)
         menu.add(0, M_BOOKMARKS, 6, R.string.menu_bookmarks)
         menu.add(0, M_HISTORY, 6, R.string.menu_history)
         menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
@@ -814,6 +837,7 @@ class BrowserActivity : Activity() {
                     tab.webView.reload()
                 }
                 M_CLOSE_PRIVATE -> tabs.filter { it.isPrivate }.forEach(::closeTab)
+                M_FIND -> showFind()
                 M_BOOKMARK -> toggleBookmark(tab)
                 M_BOOKMARKS -> showBookmarks()
                 M_HISTORY -> showHistory()
@@ -924,16 +948,18 @@ class BrowserActivity : Activity() {
         val labels = arrayOf(
             getString(R.string.set_adblock), getString(R.string.set_safe), getString(R.string.set_https),
             getString(R.string.set_cookies), getString(R.string.set_datasaver), getString(R.string.set_autoplay),
-            getString(R.string.set_restore), getString(R.string.set_cookie_refuse), getString(R.string.set_hide_slots)
+            getString(R.string.set_restore), getString(R.string.set_cookie_refuse), getString(R.string.set_hide_slots),
+            getString(R.string.set_darken)
         )
         val s = settings
-        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots)
+        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots, s.darkenSites)
         fun commit() {
             updateSettings(
                 settings.copy(
                     adblock = checked[0], safeBrowsing = checked[1], httpsOnly = checked[2],
                     blockThirdPartyCookies = checked[3], dataSaver = checked[4], autoplay = checked[5],
-                    restoreSession = checked[6], refuseCookies = checked[7], hideAdSlots = checked[8]
+                    restoreSession = checked[6], refuseCookies = checked[7], hideAdSlots = checked[8],
+                    darkenSites = checked[9]
                 )
             )
         }
@@ -987,6 +1013,46 @@ class BrowserActivity : Activity() {
         for (tab in tabs) if (tab.hasWebView) tab.webView.clearFormData()
         library.clearHistory()
         toast(R.string.cleared)
+    }
+
+    // ---------------------------------------------------------------- recherche dans la page
+
+    private fun setupFindBar() {
+        findInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val tab = current ?: return
+                val query = s?.toString().orEmpty()
+                if (query.isEmpty()) {
+                    tab.webView.clearMatches()
+                    findCount.text = ""
+                } else {
+                    tab.webView.findAllAsync(query)
+                }
+            }
+        })
+        findInput.setOnEditorActionListener { _, _, _ ->
+            current?.webView?.findNext(true)
+            true
+        }
+        findViewById<View>(R.id.find_next).setOnClickListener { current?.webView?.findNext(true) }
+        findViewById<View>(R.id.find_prev).setOnClickListener { current?.webView?.findNext(false) }
+        findViewById<View>(R.id.find_close).setOnClickListener { hideFind() }
+    }
+
+    private fun showFind() {
+        findBar.visibility = View.VISIBLE
+        findInput.setText("")
+        findCount.text = ""
+        findInput.requestFocus()
+        findInput.post { getSystemService(InputMethodManager::class.java)?.showSoftInput(findInput, InputMethodManager.SHOW_IMPLICIT) }
+    }
+
+    private fun hideFind() {
+        findBar.visibility = View.GONE
+        current?.let { if (it.hasWebView) it.webView.clearMatches() }
+        getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(findInput.windowToken, 0)
     }
 
     // ---------------------------------------------------------------- favoris et historique
@@ -1421,5 +1487,6 @@ class BrowserActivity : Activity() {
         const val M_BOOKMARK = 11
         const val M_BOOKMARKS = 12
         const val M_HISTORY = 13
+        const val M_FIND = 14
     }
 }
