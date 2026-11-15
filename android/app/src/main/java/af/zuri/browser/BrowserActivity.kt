@@ -39,8 +39,11 @@ import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewDatabase
+import android.widget.AutoCompleteTextView
 import android.widget.BaseAdapter
 import android.widget.EditText
+import android.widget.Filter
+import android.widget.Filterable
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -68,10 +71,11 @@ class BrowserActivity : Activity() {
     @Volatile internal var settings = Settings()
         private set
     private val filters: FilterLists by lazy { sharedFilters(this) }
+    private val library: Library by lazy { LibraryStore.shared(this) }
 
     private lateinit var root: View
     private lateinit var toolbar: View
-    private lateinit var address: EditText
+    private lateinit var address: AutoCompleteTextView
     private lateinit var tabsButton: TextView
     private lateinit var menuButton: ImageButton
     private lateinit var shieldButton: ImageButton
@@ -138,6 +142,14 @@ class BrowserActivity : Activity() {
             }
         }
         address.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) render() }
+        address.threshold = 1
+        address.setAdapter(SuggestionAdapter())
+        address.setOnItemClickListener { parent, _, position, _ ->
+            val choice = parent.getItemAtPosition(position) as? Suggestion ?: return@setOnItemClickListener
+            current?.let { load(it, choice.url) }
+            address.clearFocus()
+            hideKeyboard()
+        }
         tabsButton.setOnClickListener { showTabs() }
         menuButton.setOnClickListener { showMenu(it) }
         shieldButton.setOnClickListener { showShield() }
@@ -683,7 +695,7 @@ class BrowserActivity : Activity() {
 
     private fun render() {
         val tab = current ?: return
-        if (!address.hasFocus()) address.setText(tab.url)
+        if (!address.hasFocus()) address.setText(tab.url, false)
         progress.progress = tab.progress
         progress.visibility = if (tab.progress in 1..99) View.VISIBLE else View.INVISIBLE
         tabsButton.text = if (tabs.size > 99) "∞" else tabs.size.toString()
@@ -738,6 +750,12 @@ class BrowserActivity : Activity() {
         if (UrlInput.isHttp(tab.url)) menu.add(0, M_SHARE, 4, R.string.menu_share)
         menu.add(0, M_DESKTOP, 5, R.string.menu_desktop).setCheckable(true).isChecked = tab.desktopMode
         if (tabs.any { it.isPrivate }) menu.add(0, M_CLOSE_PRIVATE, 6, R.string.menu_close_private)
+        if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
+            val marked = library.isBookmarked(tab.url)
+            menu.add(0, M_BOOKMARK, 6, if (marked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
+        }
+        menu.add(0, M_BOOKMARKS, 6, R.string.menu_bookmarks)
+        menu.add(0, M_HISTORY, 6, R.string.menu_history)
         menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
         menu.add(0, M_SETTINGS, 8, R.string.menu_settings)
         popup.setOnMenuItemClickListener { item ->
@@ -754,6 +772,9 @@ class BrowserActivity : Activity() {
                     tab.webView.reload()
                 }
                 M_CLOSE_PRIVATE -> tabs.filter { it.isPrivate }.forEach(::closeTab)
+                M_BOOKMARK -> toggleBookmark(tab)
+                M_BOOKMARKS -> showBookmarks()
+                M_HISTORY -> showHistory()
                 M_CLEAR -> confirmClearData()
                 M_SETTINGS -> showSettings()
             }
@@ -855,7 +876,117 @@ class BrowserActivity : Activity() {
         WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword()
         current?.webView?.clearCache(true)
         for (tab in tabs) if (tab.hasWebView) tab.webView.clearFormData()
+        library.clearHistory()
         toast(R.string.cleared)
+    }
+
+    // ---------------------------------------------------------------- favoris et historique
+
+    internal fun onPageLoaded(tab: Tab) {
+        if (!tab.isPrivate && !tab.internalPage && UrlInput.isHttp(tab.url)) {
+            library.recordVisit(tab.url, tab.title, System.currentTimeMillis())
+        }
+    }
+
+    internal fun onTitle(tab: Tab) {
+        if (!tab.isPrivate && !tab.internalPage) library.updateTitle(tab.url, tab.title)
+    }
+
+    private fun toggleBookmark(tab: Tab) {
+        val added = library.toggleBookmark(tab.url, tab.title, System.currentTimeMillis())
+        toast(if (added) R.string.bookmark_added else R.string.bookmark_removed)
+    }
+
+    /** Liste de favoris ou d'historique : un appui ouvre la page, la croix la supprime. */
+    private fun showEntries(
+        titleRes: Int,
+        emptyRes: Int,
+        load: () -> List<Pair<String, String>>,
+        remove: (String) -> Unit,
+        neutral: Pair<Int, () -> Unit>? = null
+    ) {
+        var entries = load()
+        if (entries.isEmpty()) {
+            AlertDialog.Builder(this).setTitle(titleRes).setMessage(emptyRes).setPositiveButton(R.string.ok, null).show()
+            return
+        }
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = entries.size
+            override fun getItem(position: Int) = entries[position]
+            override fun getItemId(position: Int) = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = convertView ?: layoutInflater.inflate(R.layout.item_tab, parent, false)
+                val (url, title) = entries[position]
+                view.findViewById<TextView>(R.id.tab_title).text = title.ifBlank { UrlInput.displayHost(url) }
+                view.findViewById<TextView>(R.id.tab_url).text = url
+                val delete = view.findViewById<ImageButton>(R.id.tab_close)
+                delete.contentDescription = getString(R.string.delete)
+                delete.isFocusable = false
+                delete.setOnClickListener {
+                    remove(url)
+                    entries = load()
+                    notifyDataSetChanged()
+                }
+                return view
+            }
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setAdapter(adapter) { _, which -> entries.getOrNull(which)?.let { (url, _) -> current?.let { load(it, url) } } }
+            .setPositiveButton(R.string.ok, null)
+        neutral?.let { (label, action) -> builder.setNeutralButton(label) { _, _ -> action() } }
+        builder.show()
+    }
+
+    private fun showBookmarks() = showEntries(
+        R.string.menu_bookmarks, R.string.bookmarks_empty,
+        { library.bookmarks().map { it.url to it.title } }, library::removeBookmark
+    )
+
+    private fun showHistory() = showEntries(
+        R.string.menu_history, R.string.history_empty,
+        { library.history().map { it.url to it.title } }, library::removeVisit,
+        R.string.history_clear to {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.history_clear)
+                .setMessage(R.string.history_clear_message)
+                .setPositiveButton(R.string.clear_confirm) { _, _ -> library.clearHistory() }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
+    )
+
+    /** Suggestions locales sous la barre d'adresse (favoris puis historique). */
+    private inner class SuggestionAdapter : BaseAdapter(), Filterable {
+        private var items: List<Suggestion> = emptyList()
+
+        override fun getCount() = items.size
+        override fun getItem(position: Int) = items[position]
+        override fun getItemId(position: Int) = position.toLong()
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: layoutInflater.inflate(R.layout.item_suggestion, parent, false)
+            val item = items[position]
+            view.findViewById<TextView>(R.id.suggestion_title).text =
+                (if (item.bookmarked) "★ " else "") + item.title.ifBlank { UrlInput.displayHost(item.url) }
+            view.findViewById<TextView>(R.id.suggestion_url).text = item.url
+            return view
+        }
+
+        override fun getFilter() = object : Filter() {
+            override fun performFiltering(constraint: CharSequence?): FilterResults {
+                val found = library.suggest(constraint?.toString().orEmpty())
+                return FilterResults().apply { values = found; count = found.size }
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            override fun publishResults(constraint: CharSequence?, results: FilterResults?) {
+                items = (results?.values as? List<Suggestion>).orEmpty()
+                if (items.isEmpty()) notifyDataSetInvalidated() else notifyDataSetChanged()
+            }
+
+            override fun convertResultToString(resultValue: Any?): CharSequence = (resultValue as? Suggestion)?.url ?: ""
+        }
     }
 
     // ---------------------------------------------------------------- services de la page
@@ -1168,5 +1299,8 @@ class BrowserActivity : Activity() {
         const val M_CLOSE_PRIVATE = 8
         const val M_CLEAR = 9
         const val M_SETTINGS = 10
+        const val M_BOOKMARK = 11
+        const val M_BOOKMARKS = 12
+        const val M_HISTORY = 13
     }
 }

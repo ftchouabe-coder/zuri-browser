@@ -66,7 +66,7 @@
     <string name="ok">OK</string>
 
     <string name="clear_title">Clear data?</string>
-    <string name="clear_message">Cookies, cache, site storage and saved credentials will be deleted.</string>
+    <string name="clear_message">History, cookies, cache, site storage and saved credentials will be deleted. Bookmarks are kept.</string>
     <string name="clear_confirm">Clear</string>
     <string name="cleared">Browsing data cleared</string>
 
@@ -100,4 +100,15 @@
     <string name="download_confirm">Download</string>
     <string name="download_started">Download started: %1$s</string>
     <string name="download_unsupported">This download is not supported.</string>
+    <string name="menu_bookmark_add">Add to bookmarks</string>
+    <string name="menu_bookmark_remove">Remove bookmark</string>
+    <string name="menu_bookmarks">Bookmarks</string>
+    <string name="menu_history">History</string>
+    <string name="bookmarks_empty">No bookmarks yet. Open a page, then “Add to bookmarks” in the menu.</string>
+    <string name="history_empty">History is empty. Private tabs never appear here.</string>
+    <string name="history_clear">Clear history</string>
+    <string name="history_clear_message">All visited pages will be deleted. Bookmarks are kept.</string>
+    <string name="bookmark_added">Added to bookmarks</string>
+    <string name="bookmark_removed">Bookmark removed</string>
+    <string name="delete">Delete</string>
 </resources>

@@ -67,7 +67,7 @@
     <string name="ok">OK</string>
 
     <string name="clear_title">Effacer les données ?</string>
-    <string name="clear_message">Cookies, cache, stockage des sites et identifiants enregistrés seront supprimés.</string>
+    <string name="clear_message">Historique, cookies, cache, stockage des sites et identifiants enregistrés seront supprimés. Les favoris sont conservés.</string>
     <string name="clear_confirm">Effacer</string>
     <string name="cleared">Données de navigation effacées</string>
 
@@ -101,4 +101,15 @@
     <string name="download_confirm">Télécharger</string>
     <string name="download_started">Téléchargement lancé : %1$s</string>
     <string name="download_unsupported">Ce téléchargement n’est pas pris en charge.</string>
+    <string name="menu_bookmark_add">Ajouter aux favoris</string>
+    <string name="menu_bookmark_remove">Retirer des favoris</string>
+    <string name="menu_bookmarks">Favoris</string>
+    <string name="menu_history">Historique</string>
+    <string name="bookmarks_empty">Aucun favori pour l’instant. Ouvrez une page puis « Ajouter aux favoris » dans le menu.</string>
+    <string name="history_empty">L’historique est vide. Les onglets privés n’y apparaissent jamais.</string>
+    <string name="history_clear">Effacer l’historique</string>
+    <string name="history_clear_message">Toutes les pages visitées seront supprimées. Les favoris sont conservés.</string>
+    <string name="bookmark_added">Ajouté aux favoris</string>
+    <string name="bookmark_removed">Retiré des favoris</string>
+    <string name="delete">Supprimer</string>
 </resources>

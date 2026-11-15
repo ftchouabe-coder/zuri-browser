@@ -75,6 +75,7 @@ class ZuriWebViewClient(private val host: BrowserActivity, private val tab: Tab)
 
     override fun onPageFinished(view: WebView, url: String) {
         tab.progress = 100
+        host.onPageLoaded(tab)
         host.onTabChanged(tab)
     }
 
@@ -114,6 +115,7 @@ class ZuriChromeClient(private val host: BrowserActivity, private val tab: Tab) 
     override fun onReceivedTitle(view: WebView, title: String?) {
         if (!tab.internalPage) {
             tab.title = title.orEmpty()
+            host.onTitle(tab)
             host.onTabChanged(tab)
         }
     }

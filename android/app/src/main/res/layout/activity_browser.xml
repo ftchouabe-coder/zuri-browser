@@ -23,8 +23,11 @@
             android:contentDescription="@string/shield_desc"
             android:src="@drawable/ic_shield" />
 
-        <EditText
+        <AutoCompleteTextView
             android:id="@+id/address"
+            android:completionThreshold="1"
+            android:dropDownWidth="match_parent"
+            android:popupBackground="@color/surface"
             android:layout_width="0dp"
             android:layout_height="44dp"
             android:layout_marginStart="4dp"
