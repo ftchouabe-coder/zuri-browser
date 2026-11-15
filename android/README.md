@@ -34,6 +34,7 @@ la version de bureau quand Android le permet.
 | Téléchargements | Sur données mobiles, « Attendre le Wi‑Fi » diffère le téléchargement jusqu'au prochain réseau Wi‑Fi. |
 | Nouvelles versions | Vérification hebdomadaire sur GitHub, en Wi‑Fi seulement (désactivable). Android n'installe une mise à jour que si elle est signée par la même clé. |
 | Langues | Français, anglais, portugais et swahili, à choisir dans le menu « Langue · Language », y compris avant Android 13. La traduction swahilie est à faire relire. |
+| Sauvegarde chiffrée | « Bibliothèque › Sauvegarder » : favoris, historique, articles hors ligne et réglages dans un fichier protégé par mot de passe (AES-256-GCM, PBKDF2 310 000 itérations), pour changer de téléphone. La restauration ajoute les données sans rien supprimer. |
 | Favoris et historique | Chiffrés sur le téléphone (AES-256-GCM, clé du Keystore Android), jamais alimentés par les onglets privés. Les suggestions de la barre d'adresse sont calculées sur l'appareil : rien n'est envoyé au moteur pendant la saisie. |
 
 Aucune donnée n'est sauvegardée dans le cloud et aucune statistique n'est envoyée.
@@ -88,7 +89,12 @@ les téléphones accepteront par-dessus la version déjà installée.
   « Privé · verrouillé » dans le sélecteur). Le widget n'a pas été posé sur l'écran d'accueil, et
   « Attendre le Wi‑Fi » comme la vérification des versions n'ont pas été déclenchés (pas de
   données mobiles, aucune release publiée).
-- `./gradlew testDebugUnitTest` : 35 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
+- Sprint 4, vérifié sur le même téléphone : menu ramené à 10 entrées sur un seul écran avec
+  sous-menus, sauvegarde écrite dans Téléchargements (en-tête ZBK1, aucun texte en clair, fichier
+  de test supprimé ensuite). La restauration n'a pas pu être pilotée à distance dans le sélecteur
+  de fichiers du système ; elle est couverte par les tests unitaires (chiffrement, mauvais mot
+  de passe, fichier modifié, fusion).
+- `./gradlew testDebugUnitTest` : 39 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
   jetons des pages internes, échappement HTML, noms de fichiers, favoris et suggestions, compteur
   de données, scripts de page, faux sites mobile money, mode lecture, lecture hors ligne).
 - Sprint 2, vérifié sur le même téléphone : recherche « capitale » (1/10) sur Wikipédia, mode
