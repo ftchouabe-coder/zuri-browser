@@ -21,7 +21,7 @@ if(!best||score<300)return JSON.stringify(null);
 var out=[];
 best.querySelectorAll('h1,h2,h3,h4,p,li,blockquote').forEach(function(e){
 if(out.length>=600)return;
-if(e.closest('nav,aside,footer,form,figcaption,[aria-hidden=true],.share,.social,.related,.comments,.newsletter'))return;
+if(e.closest('nav,aside,footer,form,figcaption,table,[aria-hidden=true],.share,.social,.related,.comments,.newsletter,.infobox,.navbox,.metadata,.thumb,.toc,#toc,.mw-editsection,.references,.reflist,.noprint'))return;
 if(e.tagName!=='H1'&&e.tagName.charAt(0)!=='H'&&e.querySelector('p,li'))return;
 var x=t(e);if(x.length<2)return;
 var g=e.tagName,k=g.charAt(0)==='H'?'h':g==='LI'?'l':g==='BLOCKQUOTE'?'q':'p';
@@ -29,6 +29,15 @@ out.push([k,x.slice(0,5000)]);});
 var h=document.querySelector('h1');
 return JSON.stringify({title:((h&&t(h))||document.title||'').slice(0,300),lang:(document.documentElement.lang||'').slice(0,12),blocks:out});
 })()"""
+
+    private val FOOTNOTE = Regex("\\[(\\d{1,3}|[a-z]|réf\\.? nécessaire|citation needed|note \\d+)]", RegexOption.IGNORE_CASE)
+    private val NO_CONTENT = Regex("^[\\p{P}\\p{S}\\d\\s]*$")
+
+    /** Retire les renvois de notes (« [3] ») et les blocs sans texte réel (« [1]) », « — »). */
+    fun clean(blocks: List<Block>): List<Block> = blocks.mapNotNull { block ->
+        val text = block.text.replace(FOOTNOTE, "").replace(Regex("\\s+([,.;:)])"), "$1").replace(Regex("\\s{2,}"), " ").trim()
+        if (text.isEmpty() || NO_CONTENT.matches(text)) null else block.copy(text = text)
+    }
 
     fun minutes(article: Article): Int {
         val words = article.blocks.sumOf { b -> b.text.split(' ').count { it.isNotBlank() } }

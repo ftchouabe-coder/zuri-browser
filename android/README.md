@@ -25,6 +25,10 @@ la version de bureau quand Android le permet.
 | Données économisées | Compteur mensuel sur la page d'accueil et dans le bouclier (« 1 234 éléments bloqués, environ 18 Mo économisés »). Estimation prudente de 15 Ko par élément bloqué. Le montant (en FCFA, par exemple) ne s'affiche que si vous indiquez le prix d'1 Go de votre forfait. |
 | Faux sites mobile money | Les noms de domaine qui imitent Orange Money, MTN MoMo, Wave, Moov, Airtel, M-Pesa, Ecobank, Western Union, PayPal… déclenchent un avertissement avant le chargement de la page. Les caractères trompeurs (`0range`, `rn`→`m`, lettres cyrilliques) sont neutralisés. La vérification se fait sur le téléphone. |
 | Cookies et emplacements vides | Les bandeaux de consentement de 23 outils courants sont refusés automatiquement : clic sur « Refuser », jamais sur « Accepter ». Les emplacements publicitaires vides sont masqués (règles génériques d'EasyList). |
+| Mode lecture et voix | Le texte seul de l'article (sans images ni scripts), lisible sur petit écran, avec la durée de lecture. Lecture à voix haute avec la synthèse vocale d'Android, dans la langue de la page. |
+| Lecture hors ligne | Articles enregistrés en texte seul (quelques Ko), chiffrés sur le téléphone et lisibles sans connexion. Jamais depuis un onglet privé. |
+| Économiseur de données | Images bloquées seulement sur réseau payant (données mobiles) ; elles reviennent automatiquement en Wi‑Fi. Un bouton affiche les images d'un onglet. |
+| Recherche et mode sombre | Recherche dans la page avec compteur d'occurrences ; sites assombris quand le téléphone est en mode sombre. |
 | Favoris et historique | Chiffrés sur le téléphone (AES-256-GCM, clé du Keystore Android), jamais alimentés par les onglets privés. Les suggestions de la barre d'adresse sont calculées sur l'appareil : rien n'est envoyé au moteur pendant la saisie. |
 
 Aucune donnée n'est sauvegardée dans le cloud et aucune statistique n'est envoyée.
@@ -73,9 +77,13 @@ les téléphones accepteront par-dessus la version déjà installée.
 
 ## Tests
 
-- `./gradlew testDebugUnitTest` : 28 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
+- `./gradlew testDebugUnitTest` : 34 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
   jetons des pages internes, échappement HTML, noms de fichiers, favoris et suggestions, compteur
-  de données, scripts de page, faux sites mobile money).
+  de données, scripts de page, faux sites mobile money, mode lecture, lecture hors ligne).
+- Sprint 2, vérifié sur le même téléphone : recherche « capitale » (1/10) sur Wikipédia, mode
+  lecture nettoyé des notes et de l'infobox, lecture à voix haute lancée puis arrêtée, article
+  enregistré puis listé dans « Lecture hors ligne ». L'économiseur de données n'a pas été essayé
+  sur données mobiles (téléphone en Wi‑Fi).
 - Sprint du 15/11/2026, vérifié sur le même téléphone : avertissement sur
   `orange-money-bonus.xyz`, bandeau de Jeune Afrique refusé automatiquement dans un profil vierge,
   compteur affiché sur la page d'accueil, favori proposé dès « doua » dans la barre d'adresse.

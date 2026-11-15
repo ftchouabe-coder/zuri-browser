@@ -1090,7 +1090,7 @@ class BrowserActivity : Activity() {
                 val item = array.optJSONArray(i) ?: return@mapNotNull null
                 val kind = item.optString(0, "p").firstOrNull()?.takeIf { it in "hplq" } ?: 'p'
                 item.optString(1).trim().takeIf { it.isNotEmpty() }?.let { Block(kind, it.take(5000)) }
-            }.take(600)
+            }.take(600).let(Reader::clean)
             if (blocks.isEmpty()) null
             else Article(url, json.optString("title").trim().ifEmpty { UrlInput.displayHost(url) }.take(300), json.optString("lang"), blocks)
         }

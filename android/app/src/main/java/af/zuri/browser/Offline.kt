@@ -88,6 +88,6 @@ object OfflineStore {
             val kind = b.optString(0, "p").firstOrNull()?.takeIf { it in "hplq" } ?: 'p'
             b.optString(1).takeIf { it.isNotBlank() }?.let { Block(kind, it) }
         }
-        return Article(o.optString("u"), o.optString("t"), o.optString("l"), blocks, o.optLong("d"))
+        return Article(o.optString("u"), o.optString("t"), o.optString("l"), Reader.clean(blocks), o.optLong("d"))
     }
 }

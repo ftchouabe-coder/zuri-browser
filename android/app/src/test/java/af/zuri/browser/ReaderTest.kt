@@ -43,6 +43,22 @@ class ReaderTest {
     }
 
     @Test
+    fun nettoyageDesNotes() {
+        val cleaned = Reader.clean(
+            listOf(
+                Block('p', "Peuplée de 2 765 000 d'habitants en 2015[3], elle est [réf. nécessaire] grande."),
+                Block('p', "[1])"),
+                Block('p', "—"),
+                Block('l', "Voir [a] la carte")
+            )
+        )
+        assertEquals(
+            listOf("Peuplée de 2 765 000 d'habitants en 2015, elle est grande.", "Voir la carte"),
+            cleaned.map { it.text }
+        )
+    }
+
+    @Test
     fun decoupagePourLaVoix() {
         val chunks = Reader.speechChunks(article, max = 500)
         assertTrue(chunks.all { it.length <= 500 })
