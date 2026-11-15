@@ -171,4 +171,9 @@
     <string name="language_title">Langue de l’interface</string>
     <string name="language_system">Langue du téléphone</string>
     <string name="language_restart">Zuri va redémarrer pour changer de langue. Les onglets privés seront fermés.</string>
+    <string name="menu_page">Cette page</string>
+    <string name="menu_library">Bibliothèque</string>
+    <string name="menu_default_browser">Définir comme navigateur par défaut</string>
+    <string name="default_browser_done">Zuri ouvrira désormais les liens.</string>
+    <string name="default_browser_manual">Choisissez Zuri dans Paramètres › Applications › Applications par défaut.</string>
 </resources>

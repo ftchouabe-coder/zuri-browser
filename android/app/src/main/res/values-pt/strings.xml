@@ -160,4 +160,9 @@
     <string name="language_title">Idioma da interface</string>
     <string name="language_system">Idioma do telemóvel</string>
     <string name="language_restart">O Zuri vai reiniciar para mudar de idioma. As abas privadas serão fechadas.</string>
+    <string name="menu_page">Esta página</string>
+    <string name="menu_library">Biblioteca</string>
+    <string name="menu_default_browser">Definir como navegador predefinido</string>
+    <string name="default_browser_done">O Zuri passa a abrir as ligações.</string>
+    <string name="default_browser_manual">Escolha o Zuri em Definições › Aplicações › Aplicações predefinidas.</string>
 </resources>

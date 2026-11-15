@@ -170,4 +170,9 @@
     <string name="language_title">Interface language</string>
     <string name="language_system">Phone language</string>
     <string name="language_restart">Zuri will restart to change language. Private tabs will be closed.</string>
+    <string name="menu_page">This page</string>
+    <string name="menu_library">Library</string>
+    <string name="menu_default_browser">Set as default browser</string>
+    <string name="default_browser_done">Zuri will now open links.</string>
+    <string name="default_browser_manual">Choose Zuri in Settings › Apps › Default apps.</string>
 </resources>

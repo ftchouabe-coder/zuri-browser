@@ -260,6 +260,10 @@ class BrowserActivity : Activity() {
     @Deprecated("startActivityForResult suffit ici : pas de dépendance à androidx.activity")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_DEFAULT) {
+            if (isDefaultBrowser()) toast(R.string.default_browser_done)
+            return
+        }
         if (requestCode == REQUEST_UNLOCK) {
             if (resultCode == RESULT_OK) unlocked() else authenticating = false
             return
@@ -858,33 +862,39 @@ class BrowserActivity : Activity() {
         val tab = current ?: return
         val popup = PopupMenu(this, anchor)
         val menu = popup.menu
+        val web = UrlInput.isHttp(tab.url)
+        val page = web && !tab.internalPage
+        // Niveau principal : les actions courantes, sans défilement même sur un petit écran.
         menu.add(0, M_NEW, 0, R.string.menu_new_tab)
         menu.add(0, M_PRIVATE, 1, R.string.menu_new_private_tab)
         if (tab.webView.canGoForward()) menu.add(0, M_FORWARD, 2, R.string.menu_forward)
         if (tab.progress in 1..99) menu.add(0, M_STOP, 3, R.string.menu_stop) else menu.add(0, M_RELOAD, 3, R.string.menu_reload)
-        if (UrlInput.isHttp(tab.url)) menu.add(0, M_SHARE, 4, R.string.menu_share)
-        menu.add(0, M_DESKTOP, 5, R.string.menu_desktop).setCheckable(true).isChecked = tab.desktopMode
-        if (tabs.any { it.isPrivate }) menu.add(0, M_CLOSE_PRIVATE, 6, R.string.menu_close_private)
-        if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
-            val marked = library.isBookmarked(tab.url)
-            menu.add(0, M_BOOKMARK, 6, if (marked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
-        }
-        if (imagesBlocked(tab) && UrlInput.isHttp(tab.url) && !tab.internalPage) menu.add(0, M_IMAGES, 4, R.string.menu_show_images)
-        if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
-            menu.add(0, M_FIND, 5, R.string.menu_find)
-            menu.add(0, M_READER, 5, R.string.menu_reader)
-        }
+        if (page) menu.add(0, M_BOOKMARK, 4, if (library.isBookmarked(tab.url)) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
         if (speaking) menu.add(0, M_SPEAK_STOP, 5, R.string.menu_speak_stop)
-        else if (UrlInput.isHttp(tab.url) && (!tab.internalPage || tab.article != null)) menu.add(0, M_SPEAK, 5, R.string.menu_speak)
-        if (!tab.isPrivate && UrlInput.isHttp(tab.url) && (!tab.internalPage || tab.article != null)) {
-            menu.add(0, M_OFFLINE_SAVE, 6, R.string.menu_offline_save)
+
+        // « Cette page › » : tout ce qui agit sur la page affichée.
+        if (web) {
+            val pageMenu = menu.addSubMenu(0, M_PAGE_GROUP, 6, R.string.menu_page)
+            if (page) pageMenu.add(0, M_FIND, 0, R.string.menu_find)
+            if (page) pageMenu.add(0, M_READER, 1, R.string.menu_reader)
+            if (!speaking && (page || tab.article != null)) pageMenu.add(0, M_SPEAK, 2, R.string.menu_speak)
+            if (!tab.isPrivate && (page || tab.article != null)) pageMenu.add(0, M_OFFLINE_SAVE, 3, R.string.menu_offline_save)
+            if (imagesBlocked(tab) && page) pageMenu.add(0, M_IMAGES, 4, R.string.menu_show_images)
+            pageMenu.add(0, M_DESKTOP, 5, R.string.menu_desktop).setCheckable(true).isChecked = tab.desktopMode
+            pageMenu.add(0, M_SHARE, 6, R.string.menu_share)
         }
-        menu.add(0, M_OFFLINE_LIST, 6, R.string.menu_offline_list)
-        menu.add(0, M_BOOKMARKS, 6, R.string.menu_bookmarks)
-        menu.add(0, M_HISTORY, 6, R.string.menu_history)
-        menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
-        menu.add(0, M_SETTINGS, 8, R.string.menu_settings)
-        menu.add(0, M_LANGUAGE, 9, R.string.menu_language)
+
+        // « Bibliothèque › » : favoris, historique, lecture hors ligne, sauvegarde.
+        val libraryMenu = menu.addSubMenu(0, M_LIBRARY_GROUP, 7, R.string.menu_library)
+        libraryMenu.add(0, M_BOOKMARKS, 0, R.string.menu_bookmarks)
+        libraryMenu.add(0, M_HISTORY, 1, R.string.menu_history)
+        libraryMenu.add(0, M_OFFLINE_LIST, 2, R.string.menu_offline_list)
+
+        if (tabs.any { it.isPrivate }) menu.add(0, M_CLOSE_PRIVATE, 8, R.string.menu_close_private)
+        menu.add(0, M_CLEAR, 9, R.string.menu_clear_data)
+        menu.add(0, M_SETTINGS, 10, R.string.menu_settings)
+        menu.add(0, M_LANGUAGE, 11, R.string.menu_language)
+        if (!isDefaultBrowser()) menu.add(0, M_DEFAULT, 12, R.string.menu_default_browser)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 M_NEW -> newTab(private = false)
@@ -916,6 +926,7 @@ class BrowserActivity : Activity() {
                 M_CLEAR -> confirmClearData()
                 M_SETTINGS -> showSettings()
                 M_LANGUAGE -> chooseLanguage()
+                M_DEFAULT -> askDefaultBrowser()
             }
             true
         }
@@ -1298,6 +1309,36 @@ class BrowserActivity : Activity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(intent, REQUEST_UNLOCK)
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- navigateur par défaut
+
+    private fun isDefaultBrowser(): Boolean {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val roles = getSystemService(android.app.role.RoleManager::class.java) ?: return true
+            if (!roles.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)) return true
+            return roles.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)
+        }
+        val probe = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.org"))
+        val resolved = packageManager.resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        return resolved?.activityInfo?.packageName == packageName
+    }
+
+    /** Demande système (Android 10+) ou écran « Applications par défaut ». */
+    private fun askDefaultBrowser() {
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val roles = getSystemService(android.app.role.RoleManager::class.java)
+                if (roles != null) {
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER), REQUEST_DEFAULT)
+                    return
+                }
+            }
+            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+        } catch (_: ActivityNotFoundException) {
+            toast(R.string.default_browser_manual)
         }
     }
 
@@ -1864,6 +1905,7 @@ class BrowserActivity : Activity() {
         const val PRIVATE_PROFILE = "zuri-prive"
         const val REQUEST_PERMISSIONS = 2
         const val REQUEST_UNLOCK = 3
+        const val REQUEST_DEFAULT = 4
         const val UNSAFE_ALLOW_MS = 10 * 60 * 1000L
         const val REQUEST_FILE = 1
         const val LOOP_WINDOW_MS = 15_000L
@@ -1888,5 +1930,8 @@ class BrowserActivity : Activity() {
         const val M_OFFLINE_LIST = 19
         const val M_IMAGES = 20
         const val M_LANGUAGE = 21
+        const val M_PAGE_GROUP = 22
+        const val M_LIBRARY_GROUP = 23
+        const val M_DEFAULT = 24
     }
 }

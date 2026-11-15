@@ -160,4 +160,9 @@
     <string name="language_title">Lugha ya kiolesura</string>
     <string name="language_system">Lugha ya simu</string>
     <string name="language_restart">Zuri itaanza upya ili kubadilisha lugha. Vichupo vya faragha vitafungwa.</string>
+    <string name="menu_page">Ukurasa huu</string>
+    <string name="menu_library">Maktaba</string>
+    <string name="menu_default_browser">Weka kama kivinjari chaguomsingi</string>
+    <string name="default_browser_done">Zuri sasa itafungua viungo.</string>
+    <string name="default_browser_manual">Chagua Zuri katika Mipangilio › Programu › Programu chaguomsingi.</string>
 </resources>
