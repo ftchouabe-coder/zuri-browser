@@ -25,6 +25,7 @@ type Panel = 'settings' | 'bookmarks' | 'history' | 'downloads' | 'about'
 
 interface PrivacyState {
   totalBlocked: number
+  savedThisMonth: { count: number; bytes: number }
   ready: boolean
   lastUpdate: number
 }
@@ -45,6 +46,7 @@ export default function App(): JSX.Element {
   const [find, setFind] = useState<FindState>({ open: false, matches: 0, active: 0 })
   const [privacy, setPrivacy] = useState<PrivacyState>({
     totalBlocked: 0,
+    savedThisMonth: { count: 0, bytes: 0 },
     ready: false,
     lastUpdate: 0
   })

@@ -6,6 +6,7 @@ import { Icon } from './Icons'
 
 interface PrivacyState {
   totalBlocked: number
+  savedThisMonth: { count: number; bytes: number }
   ready: boolean
   lastUpdate: number
 }
@@ -197,6 +198,10 @@ export function StartPage({
               <strong>{privacy.totalBlocked}</strong>
               <span>{t('start.blocked')}</span>
             </button>
+            <div className="stat" title={t('start.savedHint')}>
+              <strong>≈ {formatMegabytes(privacy.savedThisMonth.bytes, french)}</strong>
+              <span>{t('start.saved')}</span>
+            </div>
             <div className="stat">
               <strong className={privacy.ready ? 'ok' : 'pending'}>
                 {privacy.ready ? t('start.filtersReady') : t('start.filtersLoading')}
@@ -219,4 +224,11 @@ export function StartPage({
       </div>
     </div>
   )
+}
+
+/** « 14,6 Mo » / « 14.6 MB » : une décimale sous 10 Mo, sinon arrondi. */
+function formatMegabytes(bytes: number, french: boolean): string {
+  const mb = bytes / (1024 * 1024)
+  const number = new Intl.NumberFormat(french ? 'fr-FR' : 'en-US', { maximumFractionDigits: mb < 10 ? 1 : 0 }).format(mb)
+  return `${number} ${french ? 'Mo' : 'MB'}`
 }

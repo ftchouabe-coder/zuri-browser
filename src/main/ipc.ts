@@ -24,6 +24,7 @@ import { applyDnsSetting, privacyShield } from './privacy'
 import { isHttpUrl, resolveInput } from './search'
 import { getSettings, updateSettings } from './settings'
 import type { TabManager } from './tabs'
+import { savingsThisMonth } from './savings'
 
 export interface AppContext {
   window: BrowserWindow
@@ -351,6 +352,7 @@ export function registerIpc(): void {
     'zuri:privacy:state',
     () => ({
       totalBlocked: privacyShield.totalBlocked,
+      savedThisMonth: savingsThisMonth(),
       ready: privacyShield.ready,
       securityReady: privacyShield.securityReady,
       lastUpdate: privacyShield.lastUpdate

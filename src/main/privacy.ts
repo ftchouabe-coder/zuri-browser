@@ -16,6 +16,7 @@ import { FiltersEngine, Request, type RequestType } from '@ghostery/adblocker'
 import { ElectronBlocker } from '@ghostery/adblocker-electron'
 import { isThirdParty } from './cookie-policy'
 import { checkLookalike } from './lookalike'
+import { recordBlocked } from './savings'
 import { getSettings } from './settings'
 
 /**
@@ -345,6 +346,7 @@ export class PrivacyShield {
 
   private countBlocked(webContentsId: number | undefined): void {
     this.blockedTotal += 1
+    recordBlocked()
     if (typeof webContentsId !== 'number') return
     const next = (this.blockedByWebContents.get(webContentsId) ?? 0) + 1
     this.blockedByWebContents.set(webContentsId, next)

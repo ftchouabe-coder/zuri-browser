@@ -247,6 +247,8 @@ export interface ZuriApi {
   privacy: {
     state(): Promise<{
       totalBlocked: number
+      /** Éléments bloqués ce mois-ci et estimation prudente des octets évités. */
+      savedThisMonth: { count: number; bytes: number }
       ready: boolean
       securityReady: boolean
       lastUpdate: number
