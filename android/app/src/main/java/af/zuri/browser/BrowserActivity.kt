@@ -1245,12 +1245,16 @@ class BrowserActivity : Activity() {
         }
         content.addView(cover, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         lockCover = cover
+        // Le cache ne suffit pas : la page resterait lisible par l'accessibilité (constaté sur
+        // téléphone). Les WebView privées sont rendues invisibles tant que c'est verrouillé.
+        tabs.filter { it.isPrivate && it.hasWebView }.forEach { it.webView.visibility = View.INVISIBLE }
         render()
     }
 
     private fun hideLockCover() {
         lockCover?.let { content.removeView(it) }
         lockCover = null
+        if (!privateLocked) tabs.filter { it.isPrivate && it.hasWebView }.forEach { it.webView.visibility = View.VISIBLE }
     }
 
     private fun unlocked() {

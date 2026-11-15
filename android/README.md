@@ -29,6 +29,11 @@ la version de bureau quand Android le permet.
 | Lecture hors ligne | Articles enregistrés en texte seul (quelques Ko), chiffrés sur le téléphone et lisibles sans connexion. Jamais depuis un onglet privé. |
 | Économiseur de données | Images bloquées seulement sur réseau payant (données mobiles) ; elles reviennent automatiquement en Wi‑Fi. Un bouton affiche les images d'un onglet. |
 | Recherche et mode sombre | Recherche dans la page avec compteur d'occurrences ; sites assombris quand le téléphone est en mode sombre. |
+| Verrouillage privé | En option, l'empreinte, le visage ou le code du téléphone est demandé pour revenir sur un onglet privé après être sorti de Zuri. Tant que c'est verrouillé, la page, son adresse et son titre sont masqués, y compris pour les services d'accessibilité. |
+| Accès rapide | Widget de recherche pour l'écran d'accueil ; raccourcis « Rechercher » et « Onglet privé » par un appui long sur l'icône. |
+| Téléchargements | Sur données mobiles, « Attendre le Wi‑Fi » diffère le téléchargement jusqu'au prochain réseau Wi‑Fi. |
+| Nouvelles versions | Vérification hebdomadaire sur GitHub, en Wi‑Fi seulement (désactivable). Android n'installe une mise à jour que si elle est signée par la même clé. |
+| Langues | Français, anglais, portugais et swahili, à choisir dans le menu « Langue · Language », y compris avant Android 13. La traduction swahilie est à faire relire. |
 | Favoris et historique | Chiffrés sur le téléphone (AES-256-GCM, clé du Keystore Android), jamais alimentés par les onglets privés. Les suggestions de la barre d'adresse sont calculées sur l'appareil : rien n'est envoyé au moteur pendant la saisie. |
 
 Aucune donnée n'est sauvegardée dans le cloud et aucune statistique n'est envoyée.
@@ -77,7 +82,13 @@ les téléphones accepteront par-dessus la version déjà installée.
 
 ## Tests
 
-- `./gradlew testDebugUnitTest` : 34 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
+- Sprint 3, vérifié sur le même téléphone : interface en swahili puis retour à la langue du
+  téléphone, raccourci « Rechercher », widget et raccourcis enregistrés auprès du système,
+  invite d'empreinte au retour sur un onglet privé verrouillé (annulée : la page reste masquée,
+  « Privé · verrouillé » dans le sélecteur). Le widget n'a pas été posé sur l'écran d'accueil, et
+  « Attendre le Wi‑Fi » comme la vérification des versions n'ont pas été déclenchés (pas de
+  données mobiles, aucune release publiée).
+- `./gradlew testDebugUnitTest` : 35 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
   jetons des pages internes, échappement HTML, noms de fichiers, favoris et suggestions, compteur
   de données, scripts de page, faux sites mobile money, mode lecture, lecture hors ligne).
 - Sprint 2, vérifié sur le même téléphone : recherche « capitale » (1/10) sur Wikipédia, mode
