@@ -65,6 +65,16 @@ Ce fichier et le dossier `keystore/` ne sont **jamais versionnés**. Gardez-en u
 sauvegarde hors de l'ordinateur : sans cette clé, il est impossible de publier une mise à jour que
 les téléphones accepteront par-dessus la version déjà installée.
 
+## Tests
+
+- `./gradlew testDebugUnitTest` : 15 tests unitaires (barre d'adresse, HTTPS, listes de filtrage,
+  jetons des pages internes, échappement HTML, noms de fichiers).
+- Vérifié à la main le 15/11/2026 sur un TECNO CG8h (Android 11, WebView 153), APK release :
+  démarrage en 1 s, passage en HTTPS, listes téléchargées puis 7 traqueurs bloqués sur un site
+  d'actualité avant tout consentement, onglet privé (captures refusées, fermeture propre),
+  confirmation de téléchargement avec alerte pour un APK. Avertissement phishing et « Ignorer »
+  vérifiés sur émulateur Android 15.
+
 ## Installer sur un téléphone
 
 1. Copiez `app-release.apk` sur le téléphone (câble, Bluetooth, messagerie…).
