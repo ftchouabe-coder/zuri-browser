@@ -199,6 +199,13 @@ class BrowserActivity : Activity() {
         super.onResume()
         current?.webView?.resumeTimers()
         current?.webView?.onResume()
+        current?.let(::guardPrivate)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // L'invite d'authentification elle-même met l'activité en arrière-plan : on l'ignore.
+        if (!authenticating) lockIfNeeded()
     }
 
     override fun onPause() {
@@ -239,6 +246,10 @@ class BrowserActivity : Activity() {
     @Deprecated("startActivityForResult suffit ici : pas de dépendance à androidx.activity")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_UNLOCK) {
+            if (resultCode == RESULT_OK) unlocked() else authenticating = false
+            return
+        }
         if (requestCode == REQUEST_FILE) {
             val callback = fileCallback ?: return
             fileCallback = null
@@ -402,6 +413,7 @@ class BrowserActivity : Activity() {
         }
         tab.webView.onResume()
         tab.pendingUrl?.let { load(tab, it) }
+        guardPrivate(tab)
         // Onglet privé : pas de capture d'écran ni d'aperçu dans les applications récentes.
         if (tab.isPrivate) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -774,7 +786,8 @@ class BrowserActivity : Activity() {
 
     private fun render() {
         val tab = current ?: return
-        if (!address.hasFocus()) address.setText(tab.url, false)
+        val hidden = privateLocked && tab.isPrivate
+        if (!address.hasFocus()) address.setText(if (hidden) "" else tab.url, false)
         progress.progress = tab.progress
         progress.visibility = if (tab.progress in 1..99) View.VISIBLE else View.INVISIBLE
         tabsButton.text = if (tabs.size > 99) "∞" else tabs.size.toString()
@@ -798,9 +811,13 @@ class BrowserActivity : Activity() {
                 val tab = tabs[position]
                 val label = tab.title.ifBlank { if (tab.url.isEmpty()) getString(R.string.tab_new) else UrlInput.displayHost(tab.url) }
                 val title = view.findViewById<TextView>(R.id.tab_title)
-                title.text = if (tab.isPrivate) getString(R.string.tab_private_prefix, label) else label
+                title.text = when {
+                    tab.isPrivate && privateLocked -> getString(R.string.tab_private_prefix, getString(R.string.lock_hidden))
+                    tab.isPrivate -> getString(R.string.tab_private_prefix, label)
+                    else -> label
+                }
                 title.setTypeface(null, if (tab === current) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-                view.findViewById<TextView>(R.id.tab_url).text = tab.url
+                view.findViewById<TextView>(R.id.tab_url).text = if (tab.isPrivate && privateLocked) "" else tab.url
                 val close = view.findViewById<ImageButton>(R.id.tab_close)
                 close.isFocusable = false
                 close.setOnClickListener {
@@ -985,17 +1002,17 @@ class BrowserActivity : Activity() {
             getString(R.string.set_adblock), getString(R.string.set_safe), getString(R.string.set_https),
             getString(R.string.set_cookies), getString(R.string.set_datasaver), getString(R.string.set_autoplay),
             getString(R.string.set_restore), getString(R.string.set_cookie_refuse), getString(R.string.set_hide_slots),
-            getString(R.string.set_darken)
+            getString(R.string.set_darken), getString(R.string.set_lock_private)
         )
         val s = settings
-        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots, s.darkenSites)
+        val checked = booleanArrayOf(s.adblock, s.safeBrowsing, s.httpsOnly, s.blockThirdPartyCookies, s.dataSaver, s.autoplay, s.restoreSession, s.refuseCookies, s.hideAdSlots, s.darkenSites, s.lockPrivate)
         fun commit() {
             updateSettings(
                 settings.copy(
                     adblock = checked[0], safeBrowsing = checked[1], httpsOnly = checked[2],
                     blockThirdPartyCookies = checked[3], dataSaver = checked[4], autoplay = checked[5],
                     restoreSession = checked[6], refuseCookies = checked[7], hideAdSlots = checked[8],
-                    darkenSites = checked[9]
+                    darkenSites = checked[9], lockPrivate = checked[10]
                 )
             )
         }
@@ -1162,6 +1179,101 @@ class BrowserActivity : Activity() {
     private fun stopSpeech() {
         tts?.stop()
         speaking = false
+    }
+
+    // ---------------------------------------------------------------- verrouillage des onglets privés
+
+    /** Onglets privés masqués tant que l'utilisateur ne s'est pas authentifié (après une sortie). */
+    private var privateLocked = false
+    private var lockCover: View? = null
+    private var authenticating = false
+
+    private fun lockIfNeeded() {
+        if (settings.lockPrivate && tabs.any { it.isPrivate }) privateLocked = true
+    }
+
+    /** Affiche le cache et demande l'empreinte ou le code si l'onglet privé est verrouillé. */
+    private fun guardPrivate(tab: Tab) {
+        if (!privateLocked || !tab.isPrivate) {
+            hideLockCover()
+            return
+        }
+        showLockCover()
+        if (!authenticating) authenticate()
+    }
+
+    private fun showLockCover() {
+        if (lockCover != null) return
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val cover = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(getColor(R.color.private_bar))
+            setPadding(pad, pad, pad, pad)
+            isClickable = true
+            addView(TextView(context).apply {
+                text = getString(R.string.lock_cover)
+                setTextColor(Color.WHITE)
+                textSize = 17f
+                gravity = android.view.Gravity.CENTER
+            })
+            addView(android.widget.Button(context).apply {
+                text = getString(R.string.lock_unlock)
+                setOnClickListener { authenticate() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = pad })
+        }
+        content.addView(cover, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        lockCover = cover
+        render()
+    }
+
+    private fun hideLockCover() {
+        lockCover?.let { content.removeView(it) }
+        lockCover = null
+    }
+
+    private fun unlocked() {
+        authenticating = false
+        privateLocked = false
+        hideLockCover()
+        render()
+    }
+
+    /** Empreinte, visage ou code du téléphone ; sans verrouillage d'écran, rien à protéger. */
+    private fun authenticate() {
+        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+        if (keyguard == null || !keyguard.isDeviceSecure) {
+            toast(R.string.lock_no_screen_lock)
+            unlocked()
+            return
+        }
+        authenticating = true
+        if (Build.VERSION.SDK_INT >= 30) {
+            val prompt = android.hardware.biometrics.BiometricPrompt.Builder(this)
+                .setTitle(getString(R.string.lock_title))
+                .setSubtitle(getString(R.string.lock_subtitle))
+                .setAllowedAuthenticators(
+                    android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                        android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
+                .build()
+            prompt.authenticate(android.os.CancellationSignal(), mainExecutor,
+                object : android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: android.hardware.biometrics.BiometricPrompt.AuthenticationResult) = unlocked()
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        authenticating = false
+                    }
+                })
+        } else {
+            @Suppress("DEPRECATION")
+            val intent = keyguard.createConfirmDeviceCredentialIntent(getString(R.string.lock_title), getString(R.string.lock_subtitle))
+            if (intent == null) {
+                unlocked()
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQUEST_UNLOCK)
+            }
+        }
     }
 
     // ---------------------------------------------------------------- économiseur de données
@@ -1676,6 +1788,7 @@ class BrowserActivity : Activity() {
 
         const val PRIVATE_PROFILE = "zuri-prive"
         const val REQUEST_PERMISSIONS = 2
+        const val REQUEST_UNLOCK = 3
         const val UNSAFE_ALLOW_MS = 10 * 60 * 1000L
         const val REQUEST_FILE = 1
         const val LOOP_WINDOW_MS = 15_000L

@@ -17,6 +17,8 @@ data class Settings(
     val hideAdSlots: Boolean = true,
     /** Assombrir les sites quand le téléphone est en mode sombre. */
     val darkenSites: Boolean = true,
+    /** Empreinte ou code du téléphone pour revenir sur un onglet privé. */
+    val lockPrivate: Boolean = false,
     /** Prix d'1 Go de données mobiles, pour estimer les économies (0 = non renseigné). */
     val dataPricePerGb: Int = 0
 )
@@ -36,6 +38,7 @@ class Prefs(context: Context) {
         refuseCookies = prefs.getBoolean("refuseCookies", true),
         hideAdSlots = prefs.getBoolean("hideAdSlots", true),
         darkenSites = prefs.getBoolean("darkenSites", true),
+        lockPrivate = prefs.getBoolean("lockPrivate", false),
         dataPricePerGb = prefs.getInt("dataPricePerGb", 0).coerceIn(0, 1_000_000)
     )
 
@@ -52,6 +55,7 @@ class Prefs(context: Context) {
             .putBoolean("refuseCookies", s.refuseCookies)
             .putBoolean("hideAdSlots", s.hideAdSlots)
             .putBoolean("darkenSites", s.darkenSites)
+            .putBoolean("lockPrivate", s.lockPrivate)
             .putInt("dataPricePerGb", s.dataPricePerGb)
             .apply()
     }

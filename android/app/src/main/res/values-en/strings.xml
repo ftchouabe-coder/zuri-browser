@@ -146,4 +146,11 @@
     <string name="offline_note">Version saved on %1$s, readable without a connection.</string>
     <string name="menu_show_images">Show images (this tab)</string>
     <string name="shield_images_blocked">Images waiting for Wi‑Fi: you are on mobile data (data saver on).</string>
+    <string name="set_lock_private">Lock private tabs (fingerprint or PIN)</string>
+    <string name="lock_title">Private tabs</string>
+    <string name="lock_subtitle">Confirm it’s you to show them</string>
+    <string name="lock_cover">Private tabs are locked</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_hidden">locked</string>
+    <string name="lock_no_screen_lock">Set up a screen lock (PIN, pattern or fingerprint) to protect private tabs.</string>
 </resources>

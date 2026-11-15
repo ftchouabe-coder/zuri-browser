@@ -147,4 +147,11 @@
     <string name="offline_note">Version enregistrée le %1$s, lisible sans connexion.</string>
     <string name="menu_show_images">Afficher les images (cet onglet)</string>
     <string name="shield_images_blocked">Images en attente du Wi‑Fi : vous êtes sur données mobiles (économiseur activé).</string>
+    <string name="set_lock_private">Verrouiller les onglets privés (empreinte ou code)</string>
+    <string name="lock_title">Onglets privés</string>
+    <string name="lock_subtitle">Confirmez votre identité pour les afficher</string>
+    <string name="lock_cover">Onglets privés verrouillés</string>
+    <string name="lock_unlock">Déverrouiller</string>
+    <string name="lock_hidden">verrouillé</string>
+    <string name="lock_no_screen_lock">Définissez un verrouillage d’écran (code, schéma ou empreinte) pour protéger les onglets privés.</string>
 </resources>
