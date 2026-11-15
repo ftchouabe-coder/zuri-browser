@@ -1370,6 +1370,9 @@ class BrowserActivity : Activity() {
                 second.text.clear()
             }
             .setNegativeButton(R.string.cancel, null)
+            .create()
+            // Un toucher à côté (fréquent quand le clavier déplace la boîte) ne doit pas effacer la saisie.
+            .apply { setCanceledOnTouchOutside(false) }
             .show()
     }
 
