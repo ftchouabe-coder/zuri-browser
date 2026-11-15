@@ -56,6 +56,7 @@ class ZuriWebViewClient(private val host: BrowserActivity, private val tab: Tab)
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
         if (UrlInput.isHttp(url)) {
             tab.internalPage = false
+            tab.article = null
             tab.url = url
             tab.pageUrl = url
             tab.blocked.set(0)

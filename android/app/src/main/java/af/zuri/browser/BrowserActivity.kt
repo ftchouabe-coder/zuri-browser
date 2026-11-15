@@ -18,6 +18,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Message
 import android.os.SystemClock
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -63,6 +65,8 @@ import androidx.webkit.ProfileStore
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.ByteArrayInputStream
 import java.text.NumberFormat
 import java.time.YearMonth
@@ -199,6 +203,8 @@ class BrowserActivity : Activity() {
     }
 
     override fun onDestroy() {
+        tts?.shutdown()
+        tts = null
         val hadPrivate = tabs.any { it.isPrivate }
         for (tab in tabs) destroyWebView(tab)
         tabs.clear()
@@ -818,7 +824,12 @@ class BrowserActivity : Activity() {
             val marked = library.isBookmarked(tab.url)
             menu.add(0, M_BOOKMARK, 6, if (marked) R.string.menu_bookmark_remove else R.string.menu_bookmark_add)
         }
-        if (UrlInput.isHttp(tab.url) && !tab.internalPage) menu.add(0, M_FIND, 5, R.string.menu_find)
+        if (UrlInput.isHttp(tab.url) && !tab.internalPage) {
+            menu.add(0, M_FIND, 5, R.string.menu_find)
+            menu.add(0, M_READER, 5, R.string.menu_reader)
+        }
+        if (speaking) menu.add(0, M_SPEAK_STOP, 5, R.string.menu_speak_stop)
+        else if (UrlInput.isHttp(tab.url) && (!tab.internalPage || tab.article != null)) menu.add(0, M_SPEAK, 5, R.string.menu_speak)
         menu.add(0, M_BOOKMARKS, 6, R.string.menu_bookmarks)
         menu.add(0, M_HISTORY, 6, R.string.menu_history)
         menu.add(0, M_CLEAR, 7, R.string.menu_clear_data)
@@ -838,6 +849,9 @@ class BrowserActivity : Activity() {
                 }
                 M_CLOSE_PRIVATE -> tabs.filter { it.isPrivate }.forEach(::closeTab)
                 M_FIND -> showFind()
+                M_READER -> openReader(tab)
+                M_SPEAK -> speak(tab)
+                M_SPEAK_STOP -> stopSpeech()
                 M_BOOKMARK -> toggleBookmark(tab)
                 M_BOOKMARKS -> showBookmarks()
                 M_HISTORY -> showHistory()
@@ -1013,6 +1027,119 @@ class BrowserActivity : Activity() {
         for (tab in tabs) if (tab.hasWebView) tab.webView.clearFormData()
         library.clearHistory()
         toast(R.string.cleared)
+    }
+
+    // ---------------------------------------------------------------- mode lecture et voix
+
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var speaking = false
+    private var pendingSpeech: Article? = null
+    private var lastUtterance = ""
+
+    private fun readerLabels(note: String? = null) = Reader.Labels(
+        getString(R.string.lang), getString(R.string.reader_original),
+        { getString(R.string.reader_minutes, it) }, note
+    )
+
+    /** Article de la page : celui déjà extrait (page de lecture) ou extrait maintenant. */
+    private fun extractArticle(tab: Tab, then: (Article?) -> Unit) {
+        val known = tab.article
+        if (known != null && tab.internalPage) {
+            then(known)
+            return
+        }
+        if (!UrlInput.isHttp(tab.url) || tab.internalPage) {
+            then(null)
+            return
+        }
+        val url = tab.url
+        tab.webView.evaluateJavascript(Reader.EXTRACT_JS) { raw -> then(parseArticle(url, raw)) }
+    }
+
+    private fun parseArticle(url: String, raw: String?): Article? = try {
+        val text = JSONTokener(raw ?: "null").nextValue() as? String
+        if (text == null) {
+            null
+        } else {
+            val json = JSONObject(text)
+            val array = json.getJSONArray("blocks")
+            val blocks = (0 until array.length()).mapNotNull { i ->
+                val item = array.optJSONArray(i) ?: return@mapNotNull null
+                val kind = item.optString(0, "p").firstOrNull()?.takeIf { it in "hplq" } ?: 'p'
+                item.optString(1).trim().takeIf { it.isNotEmpty() }?.let { Block(kind, it.take(5000)) }
+            }.take(600)
+            if (blocks.isEmpty()) null
+            else Article(url, json.optString("title").trim().ifEmpty { UrlInput.displayHost(url) }.take(300), json.optString("lang"), blocks)
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun openReader(tab: Tab) {
+        extractArticle(tab) { article ->
+            if (article == null) {
+                toast(R.string.reader_unavailable)
+            } else {
+                tab.article = article
+                renderPage(tab, article.url, article.title, Reader.html(article, readerLabels()))
+            }
+        }
+    }
+
+    private fun speak(tab: Tab) {
+        extractArticle(tab) { article -> if (article == null) toast(R.string.reader_unavailable) else startSpeech(article) }
+    }
+
+    private fun startSpeech(article: Article) {
+        val engine = tts
+        if (engine == null || !ttsReady) {
+            pendingSpeech = article
+            if (engine == null) {
+                tts = TextToSpeech(this) { status ->
+                    runOnUiThread {
+                        if (status == TextToSpeech.SUCCESS) {
+                            ttsReady = true
+                            pendingSpeech?.let(::startSpeech)
+                        } else {
+                            tts = null
+                            toast(R.string.tts_unavailable)
+                        }
+                        pendingSpeech = null
+                    }
+                }
+            }
+            return
+        }
+        val deviceLocale = resources.configuration.locales[0]
+        val locale = article.lang.takeIf { it.isNotBlank() }?.let(Locale::forLanguageTag) ?: deviceLocale
+        val result = engine.setLanguage(locale)
+        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            toast(R.string.tts_voice_missing)
+            engine.setLanguage(deviceLocale)
+        }
+        val chunks = Reader.speechChunks(article, minOf(3000, TextToSpeech.getMaxSpeechInputLength() - 1))
+        lastUtterance = "zuri-${chunks.size - 1}"
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId == lastUtterance) runOnUiThread { speaking = false }
+            }
+            @Deprecated("Remplacé par onError(String, Int)")
+            override fun onError(utteranceId: String?) {
+                runOnUiThread { speaking = false }
+            }
+        })
+        chunks.forEachIndexed { i, chunk ->
+            engine.speak(chunk, if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, "zuri-$i")
+        }
+        speaking = true
+        toast(R.string.tts_started)
+    }
+
+    private fun stopSpeech() {
+        tts?.stop()
+        speaking = false
     }
 
     // ---------------------------------------------------------------- recherche dans la page
@@ -1488,5 +1615,8 @@ class BrowserActivity : Activity() {
         const val M_BOOKMARKS = 12
         const val M_HISTORY = 13
         const val M_FIND = 14
+        const val M_READER = 15
+        const val M_SPEAK = 16
+        const val M_SPEAK_STOP = 17
     }
 }

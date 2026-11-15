@@ -41,4 +41,6 @@ class Tab(val id: Int, val isPrivate: Boolean, val parentId: Int?, private val f
     /** Scripts injectés en début de document, et la configuration qu'ils reflètent. */
     var scripts: List<androidx.webkit.ScriptHandler> = emptyList()
     var scriptKey = ""
+    /** Article extrait (mode lecture, voix, lecture hors ligne). */
+    var article: Article? = null
 }

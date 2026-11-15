@@ -129,4 +129,13 @@
     <string name="find_close">Close search</string>
     <string name="menu_find">Find in page</string>
     <string name="set_darken">Darken websites in dark mode</string>
+    <string name="menu_reader">Reader mode</string>
+    <string name="menu_speak">Read aloud</string>
+    <string name="menu_speak_stop">Stop reading</string>
+    <string name="reader_unavailable">No readable article on this page.</string>
+    <string name="reader_original">View original page</string>
+    <string name="reader_minutes">%1$d min read</string>
+    <string name="tts_unavailable">Text-to-speech is not available on this phone.</string>
+    <string name="tts_voice_missing">No voice installed for this language: reading with the default voice.</string>
+    <string name="tts_started">Reading aloud…</string>
 </resources>
